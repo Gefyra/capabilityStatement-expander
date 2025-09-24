@@ -1,0 +1,15 @@
+# FHIR CapabilityStatement Expander Requirements
+# Basis-Requirements für Python 3.11+
+
+# Optional: FHIR-spezifische Libraries für erweiterte Validierung
+# fhir.resources>=7.0.0
+# fhirclient>=4.0.0
+
+# Für erweiterte JSON-Verarbeitung (optional)
+# jsonschema>=4.0.0
+
+# Logging und CLI
+argparse  # Teil der Standard-Library
+pathlib   # Teil der Standard-Library
+json      # Teil der Standard-Library
+shutil    # Teil der Standard-Library
