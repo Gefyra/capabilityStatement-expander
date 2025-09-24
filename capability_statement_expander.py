@@ -342,6 +342,9 @@ class CapabilityStatementExpander:
         
         # Extrahiere Bindings aus StructureDefinitions
         self.extract_bindings_from_structuredefinitions()
+        
+        # Sammle Examples basierend auf meta.profile
+        self.collect_examples_by_meta_profile()
     
     def extract_bindings_from_structuredefinitions(self):
         """Extrahiert ValueSet/CodeSystem-Referenzen aus StructureDefinition-Bindings"""
@@ -368,6 +371,54 @@ class CapabilityStatementExpander:
                     extract_bindings_recursive(item, f"{path}[{i}]")
         
         extract_bindings_recursive(structdef)
+    
+    def collect_examples_by_meta_profile(self):
+        """Sammelt Examples basierend auf meta.profile Referenzen auf bereits referenzierte Profile"""
+        logger.info("Suche Examples basierend auf meta.profile Referenzen")
+        
+        initial_count = len(self.referenced_resources)
+        examples_found = 0
+        
+        # Erstelle Set aller bereits referenzierten Profile URLs
+        referenced_profiles = set()
+        for resource_ref in self.referenced_resources:
+            # Normalisiere die Referenz für Vergleiche
+            referenced_profiles.add(resource_ref)
+        
+        # Durchsuche alle Ressourcen nach meta.profile
+        for resource_id, resource_info in self.all_resources.items():
+            resource = resource_info['resource']
+            
+            # Prüfe ob die Ressource meta.profile hat
+            if 'meta' in resource and 'profile' in resource.get('meta', {}):
+                profiles = resource['meta']['profile']
+                
+                # Normalisiere zu Liste
+                if isinstance(profiles, str):
+                    profiles = [profiles]
+                elif not isinstance(profiles, list):
+                    continue
+                
+                # Prüfe ob eines der Profile bereits referenziert ist
+                for profile_url in profiles:
+                    normalized_profile = self.resolve_reference(profile_url)
+                    
+                    if normalized_profile in referenced_profiles:
+                        # Diese Ressource verwendet ein referenziertes Profile -> ist ein Example
+                        resource_url = resource.get('url', resource_id)
+                        
+                        if resource_url not in self.referenced_resources:
+                            self.referenced_resources.add(resource_url)
+                            examples_found += 1
+                            
+                            logger.info(f"Example über meta.profile gefunden: {resource.get('resourceType', 'Unknown')}/{resource_id} → Profile: {profile_url}")
+                            break  # Ein Match reicht, um die Ressource als Example zu klassifizieren
+        
+        logger.info(f"Meta.profile Analyse abgeschlossen: {examples_found} Examples gefunden")
+        
+        final_count = len(self.referenced_resources)
+        if final_count > initial_count:
+            logger.info(f"Insgesamt {final_count - initial_count} zusätzliche Ressourcen über meta.profile hinzugefügt")
     
     def extract_codesystems_from_valuesets(self):
         """Extrahiert CodeSystem-Referenzen iterativ aus bereits referenzierten ValueSets und SearchParameters"""

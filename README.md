@@ -15,6 +15,7 @@ A **GitHub Action** that recursively expands FHIR CapabilityStatements by resolv
   - ✅ ValueSets and CodeSystems (including from StructureDefinition bindings)
   - ✅ SearchParameters and OperationDefinitions
   - ✅ Examples and other referenced resources
+- 📋 **Smart Example Detection**: Finds examples via `meta.profile` references to collected profiles
 - 🧹 **Import Cleanup**: Removes `imports`/`_imports` from the final expanded CapabilityStatement
 - ⚡ **GitHub Action Ready**: Directly usable as a reusable action
 - 🔍 **Iterative Analysis**: Multi-layered analysis for nested dependencies
@@ -145,32 +146,56 @@ input/
 ### Output Directory (after expansion)
 ```
 output/
-├── CapabilityStatement-MyCS-expanded.json  # ✨ Expanded CapabilityStatement
-├── Patient-Profile.json                   # 📋 Referenced StructureDefinitions
-├── Observation-Profile.json
-├── Patient-Example.json                   # 📄 Referenced Examples
-├── ValueSet-Codes.json                    # 📚 Referenced Terminology
-└── CodeSystem-MySystem.json
+├── CapabilityStatement-expanded-example-base-capability.json  # ✨ Expanded CapabilityStatement  
+├── StructureDefinition-PatientProfile.json                   # 🏗️ Patient profile
+├── StructureDefinition-ObservationProfile.json               # 🏗️ Observation profile  
+├── ValueSet-PatientStatus.json                               # 📋 Patient status values
+├── SearchParameter-Patient-identifier.json                   # � Patient identifier search
+├── CapabilityStatement-imported-capability.json              # 📥 Imported capability
+├── Patient-example-1.json                                    # � Example detected via meta.profile
+└── Observation-example-1.json                                # 📊 Example detected via meta.profile
 ```
 
-## ⚙️ How It Works
+## 🔧 How It Works
 
-1. **📥 Load Resources**: All JSON files in the input directory are loaded and indexed by both ID and canonical URL
-2. **🔍 Find CapabilityStatement**: The specified base CapabilityStatement is located using its canonical URL
-3. **🔄 Recursive Expansion**: 
-   - All `imports` and `instantiates` references are resolved via canonical URL
-   - Imported CapabilityStatements are recursively expanded
-   - Circular references are detected and handled
-4. **🔗 Merging**: All CapabilityStatements are merged into a single expanded statement
-5. **🧩 Resource Collection**: All referenced resources are automatically identified:
-   - StructureDefinitions (`supportedProfile`, `profile`, `targetProfile`)
-   - ValueSets and CodeSystems (from StructureDefinition bindings)
-   - SearchParameters and OperationDefinitions
-   - Examples and other referenced resources
-6. **🧹 Import Cleanup**: `imports` and `_imports` are removed from the final expanded CapabilityStatement
-7. **📤 Output Generation**: 
-   - The expanded CapabilityStatement is saved with `-expanded` suffix
-   - All referenced resources are copied to the output directory
+The expander performs the following steps:
+
+1. **Initial Analysis**: Loads the base CapabilityStatement and analyzes its structure
+2. **Import Resolution**: Recursively resolves all `imports` and `instantiates` references
+3. **Profile Collection**: Extracts all StructureDefinition references from `supportedProfile` fields
+4. **Binding Analysis**: Analyzes StructureDefinitions for ValueSet and CodeSystem bindings
+5. **Dependency Resolution**: Follows references in SearchParameters and OperationDefinitions
+6. **Example Detection**: Searches for Examples via `meta.profile` references to collected profiles
+7. **Iterative Processing**: Repeats analysis until no new resources are found
+8. **Final Assembly**: Creates expanded CapabilityStatement and copies all referenced resources
+
+### 🎯 Smart Example Detection
+
+The expander includes intelligent example detection that:
+- Scans all resources in the directory structure
+- Identifies resources with `meta.profile` references
+- Matches these references against collected `supportedProfile` URLs
+- Automatically includes matching examples in the expanded output
+
+For example, if your CapabilityStatement references:
+```json
+"supportedProfile": [
+  "http://example.org/StructureDefinition/PatientProfile"
+]
+```
+
+And you have an example like:
+```json
+{
+  "resourceType": "Patient",
+  "meta": {
+    "profile": ["http://example.org/StructureDefinition/PatientProfile"]
+  },
+  // ... rest of example
+}
+```
+
+The example will be automatically detected and included in the expanded package.
 
 ## 🔧 FHIR CapabilityStatement Import Mechanism
 
