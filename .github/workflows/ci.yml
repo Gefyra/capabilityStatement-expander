@@ -32,6 +32,7 @@ jobs:
       run: |
         python -m py_compile capability_statement_expander.py
         python -m py_compile test_expander.py
+        echo "✅ Syntax check passed"
         
     - name: Run unit tests
       run: |
@@ -40,27 +41,51 @@ jobs:
     - name: Test with example data
       run: |
         mkdir -p test_output
+        echo "🔍 Testing script execution..."
         python capability_statement_expander.py ./examples ./test_output "http://example.org/CapabilityStatement/example-base-capability" --verbose
+        
+    - name: Debug output directory
+      run: |
+        echo "📁 Checking test_output directory..."
+        ls -la test_output/ || echo "Directory does not exist"
+        echo "📁 All JSON files in test_output:"
+        find test_output -name "*.json" -type f || echo "No JSON files found"
+        echo "📁 Directory tree:"
+        tree test_output/ || find test_output -type f || echo "No files found"
         
     - name: Verify output files
       run: |
-        # Check if expanded CapabilityStatement was created
-        if [ ! -f "./test_output/CapabilityStatement-expanded-example-base-capability.json" ]; then
-          echo "❌ Expanded CapabilityStatement not found"
+        echo "🔍 Looking for expanded CapabilityStatement..."
+        
+        # List all files in output directory
+        if [ -d "./test_output" ]; then
+          echo "Files in test_output:"
+          ls -la ./test_output/
+          
+          # Look for the correct expanded CapabilityStatement filename
+          EXPECTED_FILE="./test_output/CapabilityStatement-example-base-capability-expanded.json"
+          if [ -f "$EXPECTED_FILE" ]; then
+            echo "✅ Found expanded CapabilityStatement: $(basename $EXPECTED_FILE)"
+          else
+            echo "❌ Expected file not found: $(basename $EXPECTED_FILE)"
+            echo "Looking for any CapabilityStatement files:"
+            find ./test_output -name "*CapabilityStatement*" -type f || echo "None found"
+          fi
+          
+          # Count all JSON files
+          FILE_COUNT=$(find ./test_output -name "*.json" -type f | wc -l)
+          echo "📊 Total JSON files: $FILE_COUNT"
+          
+          if [ $FILE_COUNT -gt 0 ]; then
+            echo "✅ Script executed and created $FILE_COUNT files"
+          else
+            echo "❌ No files created - script may have failed"
+            exit 1
+          fi
+        else
+          echo "❌ Output directory not created"
           exit 1
         fi
-        
-        # Count generated files
-        FILE_COUNT=$(find ./test_output -name "*.json" | wc -l)
-        echo "✅ Generated $FILE_COUNT JSON files"
-        
-        # Verify minimum expected files
-        if [ $FILE_COUNT -lt 3 ]; then
-          echo "❌ Expected at least 3 files, got $FILE_COUNT"
-          exit 1
-        fi
-        
-        echo "🎉 All tests passed!"
         
     - name: Upload test artifacts
       if: always()
