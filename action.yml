@@ -121,32 +121,11 @@ runs:
         echo "================================"
         echo "📊 Total $total_files JSON files created"
         
-        # Show structure of expanded CapabilityStatement (if available)
+        # Show basic info about expanded CapabilityStatement (if available)
         expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1)
         if [ -f "$expanded_file" ]; then
           echo ""
-          echo "🔍 Structure of expanded CapabilityStatement:"
-          echo "================================================="
-          python -c "
-import json
-try:
-    with open('$expanded_file', 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    print(f'📋 ResourceType: {data.get(\"resourceType\", \"Unknown\")}')
-    print(f'🏷️  ID: {data.get(\"id\", \"Unknown\")}')
-    print(f'🔗 URL: {data.get(\"url\", \"Unknown\")}')
-    print(f'📅 Version: {data.get(\"version\", \"Unknown\")}')
-    print(f'📝 Name: {data.get(\"name\", \"Unknown\")}')
-    
-    # Count resources in REST block
-    rest_resources = 0
-    if 'rest' in data and isinstance(data['rest'], list):
-        for rest in data['rest']:
-            if 'resource' in rest and isinstance(rest['resource'], list):
-                rest_resources += len(rest['resource'])
-    print(f'🔧 REST Resources: {rest_resources}')
-    
-except Exception as e:
-    print(f'⚠️  Error reading expanded file: {e}')
-"
+          echo "🔍 Expanded CapabilityStatement created:"
+          echo "📋 File: $(basename "$expanded_file")"
+          echo "� Size: $(stat -f%z "$expanded_file" 2>/dev/null || stat -c%s "$expanded_file" 2>/dev/null || echo "unknown") bytes"
         fi
