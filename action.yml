@@ -1,268 +1,122 @@
-name: 'FHIR CapabilityStatement Expander'name: 'FHIR CapabilityStatement Expander'
+name: 'FHIR CapabilityStatement Expander'
+description: 'Expands FHIR CapabilityStatements by recursively resolving imports and extracts all referenced resources'
+author: 'Patrick Werner'
 
-description: 'Expands FHIR CapabilityStatements by recursively resolving imports and extracts all referenced resources'description: 'Expands FHIR CapabilityStatements by recursively resolving imports an           # Show basic info about expanded CapabilityStatement (if available)
+branding:
+  icon: 'layers'
+  color: 'blue'
 
-author: 'Patrick Werner'        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1)
-
-        if [ -f "$expanded_file" ]; then
-
-branding:          echo ""
-
-  icon: 'layers'          echo "🔍 Expanded CapabilityStatement created:"
-
-  color: 'blue'          echo "📋 File: $(basename "$expanded_file")"
-
-          echo "💾 Size: $(stat -c%s "$expanded_file" 2>/dev/null || stat -f%z "$expanded_file" 2>/dev/null || echo "unknown") bytes"
-
-inputs:        else
-
-  input_directory:          echo "⚠️ No expanded CapabilityStatement found"
-
-    description: 'Path to input directory with FHIR JSON files'        fi[ -f "$expanded_file" ]; then
-
-    required: true          echo ""
-
-    default: './input'          echo "🔍 Expanded CapabilityStatement created:"
-
-  output_directory:          echo "📋 File: $(basename "$expanded_file")"
-
-    description: 'Path to output directory for expanded resources'          echo "💾 Size: $(stat -c%s "$expanded_file" 2>/dev/null || stat -f%z "$expanded_file" 2>/dev/null || echo "unknown") bytes"
-
-    required: true        fiacts all referenced resources'
-
-    default: './output'author: 'Patrick Werner'
-
-  capability_statement_url:
-
-    description: 'Canonical URL of the CapabilityStatement to expand'branding:
-
-    required: true  icon: 'layers'
-
-  verbose:  color: 'blue'
-
-    description: 'Enable verbose logging'
-
-    required: falseinputs:
-
-    default: 'false'  input_directory:
-
-  python_version:    description: 'Path to input directory with FHIR JSON files'
-
-    description: 'Python version for execution'    required: true
-
-    required: false    default: './input'
-
-    default: '3.11'  output_directory:
-
+inputs:
+  input_directory:
+    description: 'Path to input directory with FHIR JSON files'
+    required: true
+    default: './input'
+  output_directory:
     description: 'Path to output directory for expanded resources'
-
-outputs:    required: true
-
-  expanded_files_count:    default: './output'
-
-    description: 'Number of created expanded files'  capability_statement_url:
-
-    value: ${{ steps.expand.outputs.files_count }}    description: 'Canonical URL of the CapabilityStatement to expand'
-
-  output_directory:    required: true
-
-    description: 'Path to output directory with expanded resources'  verbose:
-
-    value: ${{ inputs.output_directory }}    description: 'Enable verbose logging'
-
-  expanded_capability_statement:    required: false
-
-    description: 'Filename of the expanded CapabilityStatement'    default: 'false'
-
-    value: ${{ steps.expand.outputs.expanded_file }}  python_version:
-
+    required: true
+    default: './output'
+  capability_statement_url:
+    description: 'Canonical URL of the CapabilityStatement to expand'
+    required: true
+  verbose:
+    description: 'Enable verbose logging'
+    required: false
+    default: 'false'
+  python_version:
     description: 'Python version for execution'
+    required: false
+    default: '3.11'
 
-runs:    required: false
+outputs:
+  expanded_files_count:
+    description: 'Number of created expanded files'
+    value: ${{ steps.expand.outputs.files_count }}
+  output_directory:
+    description: 'Path to output directory with expanded resources'
+    value: ${{ inputs.output_directory }}
+  expanded_capability_statement:
+    description: 'Filename of the expanded CapabilityStatement'
+    value: ${{ steps.expand.outputs.expanded_file }}
 
-  using: 'composite'    default: '3.11'
-
+runs:
+  using: 'composite'
   steps:
-
-    - name: Setup Pythonoutputs:
-
-      uses: actions/setup-python@v4  expanded_files_count:
-
-      with:    description: 'Number of created expanded files'
-
-        python-version: ${{ inputs.python_version }}    value: ${{ steps.expand.outputs.files_count }}
-
-          output_directory:
-
-    - name: Install Dependencies    description: 'Path to output directory with expanded resources'
-
-      shell: bash    value: ${{ inputs.output_directory }}
-
-      run: |  expanded_capability_statement:
-
-        python -m pip install --upgrade pip    description: 'Filename of the expanded CapabilityStatement'
-
-        # No additional dependencies required for this script    value: ${{ steps.expand.outputs.expanded_file }}
-
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ inputs.python_version }}
         
-
-    - name: Validate Input Directoryruns:
-
-      shell: bash  using: 'composite'
-
-      run: |  steps:
-
-        if [ ! -d "${{ inputs.input_directory }}" ]; then    - name: Setup Python
-
-          echo "❌ Input directory not found: ${{ inputs.input_directory }}"      uses: actions/setup-python@v4
-
-          exit 1      with:
-
-        fi        python-version: ${{ inputs.python_version }}
-
-                
-
-        json_files=$(find "${{ inputs.input_directory }}" -name "*.json" | wc -l)    - name: Install Dependencies
-
-        echo "✅ Input directory found with $json_files JSON files"      shell: bash
-
-              run: |
-
-        if [ "$json_files" -eq 0 ]; then        python -m pip install --upgrade pip
-
-          echo "⚠️  Warning: No JSON files found in input directory"        # No additional dependencies required for this script
-
-        fi        
-
-            - name: Validate Input Directory
-
-    - name: Create Output Directory      shell: bash
-
-      shell: bash      run: |
-
-      run: |        if [ ! -d "${{ inputs.input_directory }}" ]; then
-
-        mkdir -p "${{ inputs.output_directory }}"          echo "❌ Input directory not found: ${{ inputs.input_directory }}"
-
-        echo "📁 Output directory created: ${{ inputs.output_directory }}"          exit 1
-
-                fi
-
-    - name: Run FHIR CapabilityStatement Expander        
-
-      id: expand        json_files=$(find "${{ inputs.input_directory }}" -name "*.json" | wc -l)
-
-      shell: bash        echo "✅ Input directory found with $json_files JSON files"
-
-      run: |        
-
-        echo "🚀 Starting FHIR CapabilityStatement Expander..."        if [ "$json_files" -eq 0 ]; then
-
-                  echo "⚠️  Warning: No JSON files found in input directory"
-
-        # Determine verbose flag        fi
-
-        VERBOSE_FLAG=""        
-
-        if [ "${{ inputs.verbose }}" = "true" ]; then    - name: Create Output Directory
-
-          VERBOSE_FLAG="--verbose"      shell: bash
-
-        fi      run: |
-
-                mkdir -p "${{ inputs.output_directory }}"
-
-        # Run the expander        echo "📁 Output directory created: ${{ inputs.output_directory }}"
-
-        python "${{ github.action_path }}/capability_statement_expander.py" \        
-
-          "${{ inputs.input_directory }}" \    - name: Run FHIR CapabilityStatement Expander
-
-          "${{ inputs.output_directory }}" \      id: expand
-
-          "${{ inputs.capability_statement_url }}" \      shell: bash
-
-          $VERBOSE_FLAG      run: |
-
-                echo "🚀 Starting FHIR CapabilityStatement Expander..."
-
-        # Count generated files        
-
-        files_count=$(find "${{ inputs.output_directory }}" -name "*.json" | wc -l)        # Determine verbose flag
-
-        echo "files_count=$files_count" >> $GITHUB_OUTPUT        VERBOSE_FLAG=""
-
-                if [ "${{ inputs.verbose }}" = "true" ]; then
-
-        # Find expanded CapabilityStatement file          VERBOSE_FLAG="--verbose"
-
-        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1 | xargs basename 2>/dev/null || echo "")        fi
-
-        echo "expanded_file=$expanded_file" >> $GITHUB_OUTPUT        
-
-                # Run the expander
-
-        echo "✅ Successfully generated $files_count files"        python "${{ github.action_path }}/capability_statement_expander.py" \
-
-                  "${{ inputs.input_directory }}" \
-
-    - name: List Generated Files          "${{ inputs.output_directory }}" \
-
-      shell: bash          "${{ inputs.capability_statement_url }}" \
-
-      run: |          $VERBOSE_FLAG
-
-        echo "📄 Generated FHIR Resources:"        
-
-        echo "================================"        # Count generated files
-
-                files_count=$(find "${{ inputs.output_directory }}" -name "*.json" | wc -l)
-
-        total_files=0        echo "files_count=$files_count" >> $GITHUB_OUTPUT
-
-        for file in "${{ inputs.output_directory }}"/*.json; do        
-
-          if [ -f "$file" ]; then        # Find expanded CapabilityStatement file
-
-            filename=$(basename "$file")        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1 | xargs basename 2>/dev/null || echo "")
-
-            size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown")        echo "expanded_file=$expanded_file" >> $GITHUB_OUTPUT
-
-            echo "  📋 $filename (${size} bytes)"        
-
-            total_files=$((total_files + 1))        echo "✅ Successfully generated $files_count files"
-
-          fi        
-
-        done    - name: List Generated Files
-
-              shell: bash
-
-        echo "================================"      run: |
-
-        echo "📊 Total $total_files JSON files created"        echo "📄 Generated FHIR Resources:"
-
-                echo "================================"
-
-        # Show basic info about expanded CapabilityStatement (if available)        
-
-        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1)        total_files=0
-
-        if [ -f "$expanded_file" ]; then        for file in "${{ inputs.output_directory }}"/*.json; do
-
-          echo ""          if [ -f "$file" ]; then
-
-          echo "🔍 Expanded CapabilityStatement created:"            filename=$(basename "$file")
-
-          echo "📋 File: $(basename "$expanded_file")"            size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown")
-
-          echo "💾 Size: $(stat -c%s "$expanded_file" 2>/dev/null || stat -f%z "$expanded_file" 2>/dev/null || echo "unknown") bytes"            echo "  📋 $filename (${size} bytes)"
-
-        else            total_files=$((total_files + 1))
-
-          echo "⚠️ No expanded CapabilityStatement found"          fi
-
-        fi        done
+    - name: Install Dependencies
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        # No additional dependencies required for this script
+        
+    - name: Validate Input Directory
+      shell: bash
+      run: |
+        if [ ! -d "${{ inputs.input_directory }}" ]; then
+          echo "❌ Input directory not found: ${{ inputs.input_directory }}"
+          exit 1
+        fi
+        
+        json_files=$(find "${{ inputs.input_directory }}" -name "*.json" | wc -l)
+        echo "✅ Input directory found with $json_files JSON files"
+        
+        if [ "$json_files" -eq 0 ]; then
+          echo "⚠️  Warning: No JSON files found in input directory"
+        fi
+        
+    - name: Create Output Directory
+      shell: bash
+      run: |
+        mkdir -p "${{ inputs.output_directory }}"
+        echo "📁 Output directory created: ${{ inputs.output_directory }}"
+        
+    - name: Run FHIR CapabilityStatement Expander
+      id: expand
+      shell: bash
+      run: |
+        echo "🚀 Starting FHIR CapabilityStatement Expander..."
+        
+        # Determine verbose flag
+        VERBOSE_FLAG=""
+        if [ "${{ inputs.verbose }}" = "true" ]; then
+          VERBOSE_FLAG="--verbose"
+        fi
+        
+        # Run the expander
+        python "${{ github.action_path }}/capability_statement_expander.py" \
+          "${{ inputs.input_directory }}" \
+          "${{ inputs.output_directory }}" \
+          "${{ inputs.capability_statement_url }}" \
+          $VERBOSE_FLAG
+        
+        # Count generated files
+        files_count=$(find "${{ inputs.output_directory }}" -name "*.json" | wc -l)
+        echo "files_count=$files_count" >> $GITHUB_OUTPUT
+        
+        # Find expanded CapabilityStatement file
+        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1 | xargs basename 2>/dev/null || echo "")
+        echo "expanded_file=$expanded_file" >> $GITHUB_OUTPUT
+        
+        echo "✅ Successfully generated $files_count files"
+        
+    - name: List Generated Files
+      shell: bash
+      run: |
+        echo "📄 Generated FHIR Resources:"
+        echo "================================"
+        
+        total_files=0
+        for file in "${{ inputs.output_directory }}"/*.json; do
+          if [ -f "$file" ]; then
+            filename=$(basename "$file")
+            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
+            echo "  📋 $filename (${size} bytes)"
+            ((total_files++))
+          fi
+        done
         
         echo "================================"
         echo "📊 Total $total_files JSON files created"
