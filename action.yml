@@ -1,5 +1,10 @@
 name: 'FHIR CapabilityStatement Expander'
-description: 'Expands FHIR CapabilityStatements by recursively resolving imports and extracts all referenced resources'
+description: 'Expands FHIR CapabilityStatements by recursively resolving imports an        if [ -f "$expanded_file" ]; then
+          echo ""
+          echo "🔍 Expanded CapabilityStatement created:"
+          echo "📋 File: $(basename "$expanded_file")"
+          echo "💾 Size: $(stat -c%s "$expanded_file" 2>/dev/null || stat -f%z "$expanded_file" 2>/dev/null || echo "unknown") bytes"
+        fiacts all referenced resources'
 author: 'Patrick Werner'
 
 branding:
@@ -112,7 +117,7 @@ runs:
         for file in "${{ inputs.output_directory }}"/*.json; do
           if [ -f "$file" ]; then
             filename=$(basename "$file")
-            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
+            size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown")
             echo "  📋 $filename (${size} bytes)"
             ((total_files++))
           fi
