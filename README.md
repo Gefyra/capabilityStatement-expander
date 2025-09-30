@@ -2,7 +2,7 @@
 
 A **GitHub Action** that recursively expands FHIR CapabilityStatements by resolving all `imports` and collecting all referenced resources. Perfect for FHIR Implementation Guide development and distribution.
 
-[![GitHub Release](https://img.shields.io/github/v/release/patrickwerner/CapabilityStatementExpander)](https://github.com/patrickwerner/CapabilityStatementExpander/releases)
+[![GitHub Release](https://img.shields.io/github/v/release/Gefyra/CapabilityStatementExpander)](https://github.com/Gefyra/CapabilityStatementExpander/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![FHIR R4](https://img.shields.io/badge/FHIR-R4-green.svg)](https://hl7.org/fhir/R4/)
 
