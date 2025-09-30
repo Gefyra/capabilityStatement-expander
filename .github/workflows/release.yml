@@ -1,0 +1,81 @@
+name: Release Action
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Extract version from tag
+      id: version
+      run: |
+        TAG=${GITHUB_REF#refs/tags/}
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ steps.version.outputs.tag }}
+        release_name: FHIR CapabilityStatement Expander ${{ steps.version.outputs.tag }}
+        body: |
+          ## 🚀 FHIR CapabilityStatement Expander ${{ steps.version.outputs.tag }}
+          
+          ### ✨ Features
+          - 🔄 Recursive import resolution for CapabilityStatements
+          - 📋 Smart example detection via meta.profile references
+          - 🧩 Complete resource extraction (profiles, valuesets, examples)
+          - ⚡ Ready-to-use GitHub Action
+          
+          ### 📖 Usage
+          ```yaml
+          - name: Expand CapabilityStatement
+            uses: Gefyra/capabilityStatement-expander@${{ steps.version.outputs.tag }}
+            with:
+              input_directory: './fhir-resources'
+              output_directory: './expanded-resources'
+              capability_statement_url: 'https://example.org/fhir/CapabilityStatement/MyCS'
+          ```
+          
+          ### 📦 What's Included
+          - Complete FHIR R4 compatibility
+          - Automatic dependency resolution
+          - Example detection via meta.profile matching
+          - Comprehensive logging and error handling
+          
+          For full documentation, see the [README](https://github.com/Gefyra/capabilityStatement-expander/blob/main/README.md).
+        draft: false
+        prerelease: false
+        
+    - name: Update major version tag
+      run: |
+        TAG=${{ steps.version.outputs.tag }}
+        MAJOR_VERSION=$(echo $TAG | cut -d. -f1)
+        
+        # Delete existing major version tag if it exists
+        git tag -d $MAJOR_VERSION 2>/dev/null || true
+        git push origin :refs/tags/$MAJOR_VERSION 2>/dev/null || true
+        
+        # Create new major version tag
+        git tag $MAJOR_VERSION
+        git push origin $MAJOR_VERSION
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Notify success
+      run: |
+        echo "🎉 Successfully released ${{ steps.version.outputs.tag }}"
+        echo "📦 Users can now use: Gefyra/capabilityStatement-expander@${{ steps.version.outputs.tag }}"
+        echo "📦 Or use major version: Gefyra/capabilityStatement-expander@$(echo ${{ steps.version.outputs.tag }} | cut -d. -f1)"
