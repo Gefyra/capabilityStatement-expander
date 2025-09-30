@@ -42,7 +42,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Expand CapabilityStatement
-      uses: Gefyra/capabilityStatement-expander@v0.0.1
+      uses: Gefyra/capabilityStatement-expander@v0  # or @v0.0.2 for specific version
       with:
         input_directory: './fhir-resources'
         output_directory: './expanded-resources'  
@@ -60,7 +60,7 @@ jobs:
 ```yaml
 - name: Expand FHIR CapabilityStatement  
   id: expand
-  uses: Gefyra/capabilityStatement-expander@v0.0.1
+  uses: Gefyra/capabilityStatement-expander@v0  # or @v0.0.2 for specific version
   with:
     input_directory: './implementation-guide/input'
     output_directory: './build/expanded'
@@ -73,6 +73,26 @@ jobs:
     echo "Expanded files: ${{ steps.expand.outputs.expanded_files_count }}"
     echo "CapabilityStatement: ${{ steps.expand.outputs.expanded_capability_statement }}"
 ```
+
+### 🏷️ Version Tags
+
+This action supports semantic versioning with automatic major version tags:
+
+```yaml
+# Latest within major version (recommended for most use cases)
+uses: Gefyra/capabilityStatement-expander@v0
+
+# Specific version (recommended for production)
+uses: Gefyra/capabilityStatement-expander@v0.0.2
+
+# Latest release (not recommended)
+uses: Gefyra/capabilityStatement-expander@main
+```
+
+**📋 Version Strategy:**
+- `@v0` - Always points to the latest `v0.x.x` release (automatic updates)
+- `@v0.0.2` - Fixed to specific version (no automatic updates)
+- `@main` - Development branch (may be unstable)
 
 ## 📥 Action Inputs
 
