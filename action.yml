@@ -114,7 +114,7 @@ runs:
             filename=$(basename "$file")
             size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
             echo "  📋 $filename (${size} bytes)"
-            ((total_files++))
+            total_files=$((total_files + 1))
           fi
         done
         
