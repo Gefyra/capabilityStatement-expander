@@ -42,7 +42,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Expand CapabilityStatement
-      uses: Gefyra/capabilityStatement-expander@v1
+      uses: Gefyra/capabilityStatement-expander@v0.0.1
       with:
         input_directory: './fhir-resources'
         output_directory: './expanded-resources'  
@@ -60,7 +60,7 @@ jobs:
 ```yaml
 - name: Expand FHIR CapabilityStatement  
   id: expand
-  uses: Gefyra/capabilityStatement-expander@v1
+  uses: Gefyra/capabilityStatement-expander@v0.0.1
   with:
     input_directory: './implementation-guide/input'
     output_directory: './build/expanded'
