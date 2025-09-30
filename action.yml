@@ -1,5 +1,14 @@
 name: 'FHIR CapabilityStatement Expander'
-description: 'Expands FHIR CapabilityStatements by recursively resolving imports an        if [ -f "$expanded_file" ]; then
+description: 'Expands FHIR CapabilityStatements by recursively resolving imports an           # Show basic info about expanded CapabilityStatement (if available)
+        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1)
+        if [ -f "$expanded_file" ]; then
+          echo ""
+          echo "🔍 Expanded CapabilityStatement created:"
+          echo "📋 File: $(basename "$expanded_file")"
+          echo "💾 Size: $(stat -c%s "$expanded_file" 2>/dev/null || stat -f%z "$expanded_file" 2>/dev/null || echo "unknown") bytes"
+        else
+          echo "⚠️ No expanded CapabilityStatement found"
+        fi[ -f "$expanded_file" ]; then
           echo ""
           echo "🔍 Expanded CapabilityStatement created:"
           echo "📋 File: $(basename "$expanded_file")"
@@ -119,7 +128,7 @@ runs:
             filename=$(basename "$file")
             size=$(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown")
             echo "  📋 $filename (${size} bytes)"
-            ((total_files++))
+            total_files=$((total_files + 1))
           fi
         done
         
