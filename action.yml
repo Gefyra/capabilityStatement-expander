@@ -73,10 +73,13 @@ runs:
       run: |
         echo "🚀 Starting FHIR CapabilityStatement Expander..."
         
-        # Determine verbose flag
+        # Determine verbose flag - auto-enable when GitHub Actions debug logging is active
         VERBOSE_FLAG=""
-        if [ "${{ inputs.verbose }}" = "true" ]; then
+        if [ "${{ inputs.verbose }}" = "true" ] || [ "$ACTIONS_STEP_DEBUG" = "true" ]; then
           VERBOSE_FLAG="--verbose"
+          if [ "$ACTIONS_STEP_DEBUG" = "true" ]; then
+            echo "🔍 Auto-enabled verbose logging (GitHub Actions debug mode detected)"
+          fi
         fi
         
         # Run the expander

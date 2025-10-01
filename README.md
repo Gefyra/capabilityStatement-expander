@@ -38,7 +38,26 @@ Enable detailed logging to troubleshoot expansion issues:
 - 🔍 Step-by-step import resolution
 - 📊 Resource collection statistics  
 - 🧩 Profile and example discovery details
-- ⚠️ Warning messages for missing resourcesursively expands FHIR CapabilityStatements by resolving all `imports` and collecting all referenced resources. Perfect for FHIR Implementation Guide development and distribution.
+- ⚠️ Warning messages for missing resources
+
+### 🤖 Auto-Enable Verbose with GitHub Debug Mode
+
+**Bonus Feature:** Verbose logging is automatically enabled when you activate GitHub Actions debug logging!
+
+```yaml
+# No need to set verbose: 'true' when using GitHub debug mode
+- name: Expand CapabilityStatement (with auto-verbose)
+  uses: Gefyra/capabilityStatement-expander@v0
+  with:
+    input_directory: './resources'
+    output_directory: './output'
+    capability_statement_url: 'https://example.org/fhir/CapabilityStatement/MyCS'
+    # verbose automatically enabled when ACTIONS_STEP_DEBUG=true
+```
+
+**To activate both debug modes:**
+1. 🔧 **Repository Settings** → Actions → General → "Enable debug logging"
+2. 🚀 **Run workflow** → Both GitHub Actions debug + FHIR verbose logging active automatically!ursively expands FHIR CapabilityStatements by resolving all `imports` and collecting all referenced resources. Perfect for FHIR Implementation Guide development and distribution.
 
 [![GitHub Release](https://img.shields.io/github/v/release/Gefyra/capabilityStatement-expander)](https://github.com/Gefyra/capabilityStatement-expander/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
