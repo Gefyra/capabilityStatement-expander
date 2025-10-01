@@ -83,62 +83,8 @@ runs:
         fi
         
         # Run the expander
-        if [ "${{ inputs.verbose }}" = "true" ] || [ "$ACTIONS_STEP_DEBUG" = "true" ]; then
-          echo "🔍 Debug: Action path: ${{ github.action_path }}"
-          echo "🔍 Debug: Working directory: $(pwd)"
-          echo "🔍 Debug: Action context - Repository: ${{ github.repository }}"
-          echo "🔍 Debug: Action context - Ref: ${{ github.ref }}"
-          echo "🔍 Debug: Looking for script at: ${{ github.action_path }}/capability_statement_expander.py"
-          
-          # Check if entire actions directory structure exists
-          echo "🔍 Debug: Actions root directory:"
-          ls -la /home/runner/work/_actions/ 2>/dev/null || echo "Actions root not accessible"
-          
-          # Check if Gefyra directory exists
-          echo "🔍 Debug: Gefyra directory:"
-          ls -la /home/runner/work/_actions/Gefyra/ 2>/dev/null || echo "Gefyra directory not found"
-          
-          # Check if repository directory exists
-          echo "🔍 Debug: Repository directory:"
-          ls -la /home/runner/work/_actions/Gefyra/capabilityStatement-expander/ 2>/dev/null || echo "Repository directory not found"
-          
-          # Check parent directories
-          echo "🔍 Debug: Parent directory structure:"
-          ls -la "$(dirname "${{ github.action_path }}")" 2>/dev/null || echo "Parent not accessible"
-          
-          echo "🔍 Debug: Contents of action path:"
-          ls -la "${{ github.action_path }}/" || echo "Action path not accessible"
-          
-          # Try to find the script anywhere - universal approach
-          echo "🔍 Debug: Searching for Python script universally:"
-          find / -name "capability_statement_expander.py" -type f 2>/dev/null | head -5 || echo "Python script not found anywhere"
-          
-          echo "🔍 Debug: Searching for any Python files in system:"
-          find / -name "*.py" -path "*action*" -type f 2>/dev/null | head -10 || echo "No action Python files found"
-          
-          echo "🔍 Debug: Current working directory content:"
-          ls -la .
-          
-          echo "🔍 Debug: Environment variables:"
-          echo "GITHUB_ACTION_PATH: ${GITHUB_ACTION_PATH:-not set}"
-          echo "GITHUB_WORKSPACE: ${GITHUB_WORKSPACE:-not set}"
-          
-          # Search for any directories with similar names
-          echo "🔍 Debug: Searching for similar directory names:"
-          find /home/runner/work/_actions -type d -name "*capability*" 2>/dev/null || echo "No capability directories found"
-          find /home/runner/work/_actions -type d -name "*Gefyra*" 2>/dev/null || echo "No Gefyra directories found"
-        fi
-        
-        # Check if script exists and provide fallback
-        echo "🔍 Debug: Direct file test:"
-        echo "File path from github.action_path: ${{ github.action_path }}/capability_statement_expander.py"
-        echo "File path from GITHUB_ACTION_PATH: $GITHUB_ACTION_PATH/capability_statement_expander.py"
-        
-        # Use the environment variable instead of the GitHub expression
+        # Use the environment variable for container compatibility
         SCRIPT_PATH="$GITHUB_ACTION_PATH/capability_statement_expander.py"
-        
-        ls -la "$SCRIPT_PATH" || echo "Direct ls failed"
-        test -f "$SCRIPT_PATH" && echo "test -f SUCCESS" || echo "test -f FAILED"
         
         if [ -f "$SCRIPT_PATH" ]; then
           echo "✅ Script found, executing..."
@@ -147,10 +93,11 @@ runs:
             "${{ inputs.output_directory }}" \
             "${{ inputs.capability_statement_url }}" \
             $VERBOSE_FLAG
+        echo "✅ Capability Statement successfully expanded to ${{ inputs.output-dir }}"
         else
-          echo "❌ Script not found at expected location"
-          echo "🔍 Trying alternative locations..."
-          find /home/runner/work/_actions -name "capability_statement_expander.py" 2>/dev/null || echo "Script not found anywhere"
+          echo "❌ Script not found at expected location: $SCRIPT_PATH"
+          echo "Action path: ${{ github.action_path }}"
+          echo "Environment path: $GITHUB_ACTION_PATH"
           exit 1
         fi
         
