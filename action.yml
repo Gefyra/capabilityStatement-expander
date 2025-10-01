@@ -88,12 +88,28 @@ runs:
         
         if [ -f "$SCRIPT_PATH" ]; then
           echo "✅ Script found, executing..."
-          python "$SCRIPT_PATH" \
+          
+          # Capture output to extract copied files count
+          EXPANDER_OUTPUT=$(python "$SCRIPT_PATH" \
             "${{ inputs.input_directory }}" \
             "${{ inputs.output_directory }}" \
             "${{ inputs.capability_statement_url }}" \
-            $VERBOSE_FLAG
-        echo "✅ Capability Statement successfully expanded to ${{ inputs.output-dir }}"
+            ${{ inputs.verbose == 'true' && '--verbose' || '' }} 2>&1)
+          
+          echo "$EXPANDER_OUTPUT"
+          
+          # Extract number of copied files from log output
+          copied_files=$(echo "$EXPANDER_OUTPUT" | grep -o '[0-9]\+ Dateien kopiert' | grep -o '[0-9]\+' || echo "0")
+          files_count=$copied_files
+          
+          echo "files_count=$files_count" >> $GITHUB_OUTPUT
+          
+          # Find expanded CapabilityStatement file
+          expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1 | xargs basename 2>/dev/null || echo "")
+          echo "expanded_file=$expanded_file" >> $GITHUB_OUTPUT
+          
+          echo "✅ Capability Statement successfully expanded to ${{ inputs.output_directory }}"
+          echo "✅ Successfully processed $files_count files"
         else
           echo "❌ Script not found at expected location: $SCRIPT_PATH"
           echo "Action path: ${{ github.action_path }}"
@@ -101,40 +117,78 @@ runs:
           exit 1
         fi
         
-        # Count generated files
-        files_count=$(find "${{ inputs.output_directory }}" -name "*.json" | wc -l)
-        echo "files_count=$files_count" >> $GITHUB_OUTPUT
-        
-        # Find expanded CapabilityStatement file
-        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1 | xargs basename 2>/dev/null || echo "")
-        echo "expanded_file=$expanded_file" >> $GITHUB_OUTPUT
-        
-        echo "✅ Successfully generated $files_count files"
-        
     - name: List Generated Files
       shell: bash
       run: |
-        echo "📄 Generated FHIR Resources:"
+        echo "📄 Processed FHIR Resources:"
         echo "================================"
         
         total_files=0
-        for file in "${{ inputs.output_directory }}"/*.json; do
+        expanded_files=0
+        copied_files=0
+        
+        # First, show expanded CapabilityStatement(s)
+        echo "🔧 Expanded Resources:"
+        for file in "${{ inputs.output_directory }}"/*expanded*.json; do
           if [ -f "$file" ]; then
             filename=$(basename "$file")
             size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
             echo "  📋 $filename (${size} bytes)"
             total_files=$((total_files + 1))
+            expanded_files=$((expanded_files + 1))
           fi
         done
         
-        echo "================================"
-        echo "📊 Total $total_files JSON files created"
-        
-        # Show basic info about expanded CapabilityStatement (if available)
-        expanded_file=$(find "${{ inputs.output_directory }}" -name "*expanded.json" | head -1)
-        if [ -f "$expanded_file" ]; then
-          echo ""
-          echo "🔍 Expanded CapabilityStatement created:"
-          echo "📋 File: $(basename "$expanded_file")"
-          echo "� Size: $(stat -f%z "$expanded_file" 2>/dev/null || stat -c%s "$expanded_file" 2>/dev/null || echo "unknown") bytes"
+        if [ $expanded_files -eq 0 ]; then
+          echo "  (No expanded resources found)"
         fi
+        
+        echo ""
+        echo "� Copied Resources:"
+        
+        # Then show all other files (copied)
+        for file in "${{ inputs.output_directory }}"/*.json; do
+          if [ -f "$file" ] && [[ ! "$file" == *"expanded"* ]]; then
+            filename=$(basename "$file")
+            size=$(stat -f%z "$file" 2>/dev/null || stat -c%s "$file" 2>/dev/null || echo "unknown")
+            
+            # Try to determine resource type from filename or content
+            resource_type="Unknown"
+            if [[ "$filename" == *"CapabilityStatement"* ]]; then
+              resource_type="CapabilityStatement"
+            elif [[ "$filename" == *"StructureDefinition"* ]]; then
+              resource_type="StructureDefinition"
+            elif [[ "$filename" == *"ValueSet"* ]]; then
+              resource_type="ValueSet"
+            elif [[ "$filename" == *"CodeSystem"* ]]; then
+              resource_type="CodeSystem"
+            elif [[ "$filename" == *"SearchParameter"* ]]; then
+              resource_type="SearchParameter"
+            elif [[ "$filename" == *"ImplementationGuide"* ]]; then
+              resource_type="ImplementationGuide"
+            elif [[ "$filename" == *"Subscription"* ]]; then
+              resource_type="Subscription"
+            else
+              # Try to extract from JSON content
+              resource_type=$(grep -o '"resourceType"[[:space:]]*:[[:space:]]*"[^"]*"' "$file" 2>/dev/null | sed 's/.*"\([^"]*\)".*/\1/' | head -1)
+              if [ -z "$resource_type" ]; then
+                resource_type="Unknown"
+              fi
+            fi
+            
+            echo "  📋 $filename [$resource_type] (${size} bytes)"
+            total_files=$((total_files + 1))
+            copied_files=$((copied_files + 1))
+          fi
+        done
+        
+        if [ $copied_files -eq 0 ]; then
+          echo "  (No copied resources found)"
+        fi
+        
+        echo ""
+        echo "================================"
+        echo "📊 Summary:"
+        echo "  🔧 Expanded: $expanded_files files"
+        echo "  📁 Copied: $copied_files files"
+        echo "  📋 Total: $total_files files processed"
