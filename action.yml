@@ -130,6 +130,11 @@ runs:
         fi
         
         # Check if script exists and provide fallback
+        echo "🔍 Debug: Direct file test:"
+        echo "File path: ${{ github.action_path }}/capability_statement_expander.py"
+        ls -la "${{ github.action_path }}/capability_statement_expander.py" || echo "Direct ls failed"
+        test -f "${{ github.action_path }}/capability_statement_expander.py" && echo "test -f SUCCESS" || echo "test -f FAILED"
+        
         if [ -f "${{ github.action_path }}/capability_statement_expander.py" ]; then
           echo "✅ Script found, executing..."
           python "${{ github.action_path }}/capability_statement_expander.py" \
