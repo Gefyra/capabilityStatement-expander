@@ -42,7 +42,7 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ inputs.python_version }}
                
@@ -90,6 +90,18 @@ runs:
           echo "🔍 Debug: Action context - Ref: ${{ github.ref }}"
           echo "🔍 Debug: Looking for script at: ${{ github.action_path }}/capability_statement_expander.py"
           
+          # Check if entire actions directory structure exists
+          echo "🔍 Debug: Actions root directory:"
+          ls -la /home/runner/work/_actions/ 2>/dev/null || echo "Actions root not accessible"
+          
+          # Check if Gefyra directory exists
+          echo "🔍 Debug: Gefyra directory:"
+          ls -la /home/runner/work/_actions/Gefyra/ 2>/dev/null || echo "Gefyra directory not found"
+          
+          # Check if repository directory exists
+          echo "🔍 Debug: Repository directory:"
+          ls -la /home/runner/work/_actions/Gefyra/capabilityStatement-expander/ 2>/dev/null || echo "Repository directory not found"
+          
           # Check parent directories
           echo "🔍 Debug: Parent directory structure:"
           ls -la "$(dirname "${{ github.action_path }}")" 2>/dev/null || echo "Parent not accessible"
@@ -97,18 +109,24 @@ runs:
           echo "🔍 Debug: Contents of action path:"
           ls -la "${{ github.action_path }}/" || echo "Action path not accessible"
           
-          # Try to find the script anywhere in the actions directory
-          echo "🔍 Debug: Searching for Python script in actions directory:"
-          find /home/runner/work/_actions -name "*.py" -type f 2>/dev/null | head -10 || echo "No Python files found"
+          # Try to find the script anywhere - universal approach
+          echo "🔍 Debug: Searching for Python script universally:"
+          find / -name "capability_statement_expander.py" -type f 2>/dev/null | head -5 || echo "Python script not found anywhere"
+          
+          echo "🔍 Debug: Searching for any Python files in system:"
+          find / -name "*.py" -path "*action*" -type f 2>/dev/null | head -10 || echo "No action Python files found"
+          
+          echo "🔍 Debug: Current working directory content:"
+          ls -la .
+          
+          echo "🔍 Debug: Environment variables:"
+          echo "GITHUB_ACTION_PATH: ${GITHUB_ACTION_PATH:-not set}"
+          echo "GITHUB_WORKSPACE: ${GITHUB_WORKSPACE:-not set}"
           
           # Search for any directories with similar names
           echo "🔍 Debug: Searching for similar directory names:"
           find /home/runner/work/_actions -type d -name "*capability*" 2>/dev/null || echo "No capability directories found"
           find /home/runner/work/_actions -type d -name "*Gefyra*" 2>/dev/null || echo "No Gefyra directories found"
-          
-          # List all downloaded actions
-          echo "🔍 Debug: All downloaded actions:"
-          ls -la /home/runner/work/_actions/ 2>/dev/null || echo "Actions directory not accessible"
         fi
         
         # Check if script exists and provide fallback
