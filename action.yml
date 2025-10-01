@@ -136,20 +136,37 @@ runs:
           echo "📄 Processed FHIR Resources:"
           echo "================================"
           
-          # Parse and display expanded files
+          # Parse totals using simple grep
+          expanded_count=$(echo "$SUMMARY_JSON" | grep -o '"total_expanded": [0-9]*' | grep -o '[0-9]*' || echo "0")
+          copied_count=$(echo "$SUMMARY_JSON" | grep -o '"total_copied": [0-9]*' | grep -o '[0-9]*' || echo "0")
+          total_files=$(echo "$SUMMARY_JSON" | grep -o '"total_files": [0-9]*' | grep -o '[0-9]*' || echo "0")
+          
           echo "🔧 Expanded Resources:"
-          expanded_count=$(echo "$SUMMARY_JSON" | jq -r '.total_expanded // 0')
           if [ "$expanded_count" -gt 0 ]; then
-            echo "$SUMMARY_JSON" | jq -r '.expanded_files[]? | "  📋 \(.relative_path) (\(.size) bytes)"'
+            # Extract relative_path from expanded_files section
+            echo "$SUMMARY_JSON" | sed -n '/"expanded_files"/,/"copied_files"/p' | \
+            grep '"relative_path"' | \
+            sed 's/.*"relative_path": *"\([^"]*\)".*/  📋 \1/' | \
+            while read -r line; do
+              # Get size for this file (simplified)
+              echo "$line (expanded)"
+            done
           else
             echo "  (No expanded resources found)"
           fi
           
           echo ""
           echo "📁 Copied Resources:"
-          copied_count=$(echo "$SUMMARY_JSON" | jq -r '.total_copied // 0')
           if [ "$copied_count" -gt 0 ]; then
-            echo "$SUMMARY_JSON" | jq -r '.copied_files[]? | "  📋 \(.relative_path) [\(.resource_type)] (\(.size) bytes)"'
+            # Extract from copied_files section - use line-by-line processing
+            echo "$SUMMARY_JSON" | sed -n '/"copied_files"/,/"total_expanded"/p' | \
+            grep -E '"relative_path"|"resource_type"' | \
+            paste - - | \
+            sed 's/.*"relative_path": *"\([^"]*\)".*"resource_type": *"\([^"]*\)".*/  📋 \1 [\2]/' || {
+              # Simple fallback
+              echo "$SUMMARY_JSON" | grep '"relative_path"' | tail -n +2 | \
+              sed 's/.*"relative_path": *"\([^"]*\)".*/  📋 \1/'
+            }
           else
             echo "  (No copied resources found)"
           fi
@@ -159,7 +176,6 @@ runs:
           echo "📊 Summary:"
           echo "  🔧 Expanded: $expanded_count files"
           echo "  📁 Copied: $copied_count files"
-          total_files=$(echo "$SUMMARY_JSON" | jq -r '.total_files // 0')
           echo "  📋 Total: $total_files files processed"
         else
           echo "⚠️  Could not parse processing summary from output"
