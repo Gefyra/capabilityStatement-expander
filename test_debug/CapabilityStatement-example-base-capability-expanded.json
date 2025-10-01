@@ -1,0 +1,90 @@
+{
+  "resourceType": "CapabilityStatement",
+  "id": "example-base-capability-expanded",
+  "url": "http://example.org/CapabilityStatement/example-base-capability",
+  "name": "ExampleBaseCapabilityExpanded",
+  "title": "Example Base CapabilityStatement (Expanded)",
+  "status": "active",
+  "date": "2025-09-24",
+  "publisher": "Example Organization",
+  "description": "Ein Basis-CapabilityStatement mit Imports",
+  "kind": "requirements",
+  "fhirVersion": "4.0.1",
+  "format": [
+    "json"
+  ],
+  "rest": [
+    {
+      "mode": "server",
+      "resource": [
+        {
+          "type": "Patient",
+          "supportedProfile": [
+            "http://example.org/StructureDefinition/PatientProfile",
+            "http://example.org/StructureDefinition/ExtendedPatientProfile"
+          ],
+          "interaction": [
+            {
+              "code": "read"
+            },
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "identifier",
+              "type": "token",
+              "definition": "http://example.org/SearchParameter/Patient-identifier"
+            },
+            {
+              "name": "status",
+              "type": "token",
+              "binding": {
+                "strength": "required",
+                "valueSet": "http://example.org/ValueSet/PatientStatus"
+              }
+            }
+          ]
+        },
+        {
+          "type": "Observation",
+          "supportedProfile": [
+            "http://example.org/StructureDefinition/ObservationProfile"
+          ],
+          "interaction": [
+            {
+              "code": "read"
+            },
+            {
+              "code": "create"
+            }
+          ]
+        },
+        {
+          "type": "DiagnosticReport",
+          "supportedProfile": [
+            "http://example.org/StructureDefinition/DiagnosticReportProfile"
+          ],
+          "interaction": [
+            {
+              "code": "read"
+            },
+            {
+              "code": "search-type"
+            }
+          ],
+          "searchParam": [
+            {
+              "name": "status",
+              "type": "token",
+              "binding": {
+                "valueSet": "http://example.org/ValueSet/DiagnosticReportStatus"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

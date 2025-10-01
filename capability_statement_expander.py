@@ -30,6 +30,10 @@ class CapabilityStatementExpander:
         self.all_resources: Dict[str, Dict] = {}
         self.resources_by_url: Dict[str, Dict] = {}  # Index für canonical URLs
         
+        # Track processed files for reporting
+        self.expanded_files: List[Dict] = []
+        self.copied_files: List[Dict] = []
+        
     def load_all_resources(self):
         """Lädt alle JSON-Ressourcen aus dem Input-Verzeichnis"""
         logger.info(f"Lade Ressourcen aus {self.input_dir}")
@@ -560,11 +564,34 @@ class CapabilityStatementExpander:
                 shutil.copy2(source_path, target_path)
                 copied_count += 1
                 
+                # Track copied file
+                resource_type = resource_info['resource'].get('resourceType', 'Unknown')
+                self.copied_files.append({
+                    'filename': os.path.basename(target_path),
+                    'relative_path': os.path.relpath(target_path, self.output_dir),
+                    'size': os.path.getsize(target_path),
+                    'resource_type': resource_type
+                })
+                
                 logger.debug(f"Kopiert: {relative_path}")
             else:
                 logger.warning(f"Referenzierte Ressource nicht gefunden: {resource_ref}")
         
         logger.info(f"{copied_count} Dateien kopiert")
+    
+    def print_summary_report(self):
+        """Druckt einen strukturierten Bericht über alle verarbeiteten Dateien"""
+        print("\n" + "="*50)
+        print("FHIR_PROCESSING_SUMMARY_START")
+        print(json.dumps({
+            'expanded_files': self.expanded_files,
+            'copied_files': self.copied_files,
+            'total_expanded': len(self.expanded_files),
+            'total_copied': len(self.copied_files),
+            'total_files': len(self.expanded_files) + len(self.copied_files)
+        }, indent=2))
+        print("FHIR_PROCESSING_SUMMARY_END")
+        print("="*50)
     
     def save_expanded_capability_statement(self, expanded_cs: Dict):
         """Speichert das expandierte CapabilityStatement"""
@@ -592,6 +619,14 @@ class CapabilityStatementExpander:
             json.dump(expanded_cs, f, indent=2, ensure_ascii=False)
         
         logger.info(f"Expandiertes CapabilityStatement gespeichert: {output_file}")
+        
+        # Track expanded file
+        self.expanded_files.append({
+            'filename': os.path.basename(output_file),
+            'relative_path': os.path.relpath(output_file, self.output_dir),
+            'size': os.path.getsize(output_file),
+            'resource_type': 'CapabilityStatement'
+        })
     
     def run(self):
         """Hauptausführung des Expanders"""
@@ -612,6 +647,9 @@ class CapabilityStatementExpander:
             
             # Kopiere alle referenzierten Ressourcen
             self.copy_referenced_resources()
+            
+            # Drucke strukturierten Bericht
+            self.print_summary_report()
             
             logger.info("CapabilityStatement Expansion erfolgreich abgeschlossen")
             
