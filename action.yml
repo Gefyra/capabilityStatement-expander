@@ -83,11 +83,33 @@ runs:
         fi
         
         # Run the expander
-        echo "🔍 Debug: Action path: ${{ github.action_path }}"
-        echo "🔍 Debug: Working directory: $(pwd)"
-        echo "🔍 Debug: Looking for script at: ${{ github.action_path }}/capability_statement_expander.py"
-        echo "🔍 Debug: Contents of action path:"
-        ls -la "${{ github.action_path }}/" || echo "Action path not accessible"
+        if [ "${{ inputs.verbose }}" = "true" ] || [ "$ACTIONS_STEP_DEBUG" = "true" ]; then
+          echo "🔍 Debug: Action path: ${{ github.action_path }}"
+          echo "🔍 Debug: Working directory: $(pwd)"
+          echo "🔍 Debug: Action context - Repository: ${{ github.repository }}"
+          echo "🔍 Debug: Action context - Ref: ${{ github.ref }}"
+          echo "🔍 Debug: Looking for script at: ${{ github.action_path }}/capability_statement_expander.py"
+          
+          # Check parent directories
+          echo "🔍 Debug: Parent directory structure:"
+          ls -la "$(dirname "${{ github.action_path }}")" 2>/dev/null || echo "Parent not accessible"
+          
+          echo "🔍 Debug: Contents of action path:"
+          ls -la "${{ github.action_path }}/" || echo "Action path not accessible"
+          
+          # Try to find the script anywhere in the actions directory
+          echo "🔍 Debug: Searching for Python script in actions directory:"
+          find /home/runner/work/_actions -name "*.py" -type f 2>/dev/null | head -10 || echo "No Python files found"
+          
+          # Search for any directories with similar names
+          echo "🔍 Debug: Searching for similar directory names:"
+          find /home/runner/work/_actions -type d -name "*capability*" 2>/dev/null || echo "No capability directories found"
+          find /home/runner/work/_actions -type d -name "*Gefyra*" 2>/dev/null || echo "No Gefyra directories found"
+          
+          # List all downloaded actions
+          echo "🔍 Debug: All downloaded actions:"
+          ls -la /home/runner/work/_actions/ 2>/dev/null || echo "Actions directory not accessible"
+        fi
         
         # Check if script exists and provide fallback
         if [ -f "${{ github.action_path }}/capability_statement_expander.py" ]; then
