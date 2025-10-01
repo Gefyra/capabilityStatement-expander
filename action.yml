@@ -45,13 +45,7 @@ runs:
       uses: actions/setup-python@v4
       with:
         python-version: ${{ inputs.python_version }}
-        
-    - name: Install Dependencies
-      shell: bash
-      run: |
-        python -m pip install --upgrade pip
-        # No additional dependencies required for this script
-        
+               
     - name: Validate Input Directory
       shell: bash
       run: |
@@ -86,11 +80,26 @@ runs:
         fi
         
         # Run the expander
-        python "${{ github.action_path }}/capability_statement_expander.py" \
-          "${{ inputs.input_directory }}" \
-          "${{ inputs.output_directory }}" \
-          "${{ inputs.capability_statement_url }}" \
-          $VERBOSE_FLAG
+        echo "🔍 Debug: Action path: ${{ github.action_path }}"
+        echo "🔍 Debug: Working directory: $(pwd)"
+        echo "🔍 Debug: Looking for script at: ${{ github.action_path }}/capability_statement_expander.py"
+        echo "🔍 Debug: Contents of action path:"
+        ls -la "${{ github.action_path }}/" || echo "Action path not accessible"
+        
+        # Check if script exists and provide fallback
+        if [ -f "${{ github.action_path }}/capability_statement_expander.py" ]; then
+          echo "✅ Script found, executing..."
+          python "${{ github.action_path }}/capability_statement_expander.py" \
+            "${{ inputs.input_directory }}" \
+            "${{ inputs.output_directory }}" \
+            "${{ inputs.capability_statement_url }}" \
+            $VERBOSE_FLAG
+        else
+          echo "❌ Script not found at expected location"
+          echo "🔍 Trying alternative locations..."
+          find /home/runner/work/_actions -name "capability_statement_expander.py" 2>/dev/null || echo "Script not found anywhere"
+          exit 1
+        fi
         
         # Count generated files
         files_count=$(find "${{ inputs.output_directory }}" -name "*.json" | wc -l)

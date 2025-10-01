@@ -1,6 +1,44 @@
 # FHIR CapabilityStatement Expander Action 🚀
 
-A **GitHub Action** that recursively expands FHIR CapabilityStatements by resolving all `imports` and collecting all referenced resources. Perfect for FHIR Implementation Guide development and distribution.
+A **GitHub### Advanced Configuration
+
+```yaml
+- name: Expand FHIR CapabilityStatement  
+  id: expand
+  uses: Gefyra/capabilityStatement-expander@v0  # or @v0.0.2 for specific version
+  with:
+    input_directory: './implementation-guide/input'
+    output_directory: './build/expanded'
+    capability_statement_url: 'https://example.org/fhir/CapabilityStatement/MyCapability'
+    verbose: 'true'  # Enable detailed logging for debugging
+    python_version: '3.10'
+    
+- name: Show Results
+  run: |
+    echo "Expanded files: ${{ steps.expand.outputs.expanded_files_count }}"
+    echo "CapabilityStatement: ${{ steps.expand.outputs.expanded_capability_statement }}"
+```
+
+### 🔍 Verbose Logging
+
+Enable detailed logging to troubleshoot expansion issues:
+
+```yaml
+- name: Debug Expansion Process
+  uses: Gefyra/capabilityStatement-expander@v0
+  with:
+    input_directory: './resources'
+    output_directory: './output'
+    capability_statement_url: 'https://example.org/fhir/CapabilityStatement/MyCS'
+    verbose: 'true'  # Shows detailed processing steps
+```
+
+**With `verbose: 'true'` you get:**
+- 📋 Detailed file processing information
+- 🔍 Step-by-step import resolution
+- 📊 Resource collection statistics  
+- 🧩 Profile and example discovery details
+- ⚠️ Warning messages for missing resourcesursively expands FHIR CapabilityStatements by resolving all `imports` and collecting all referenced resources. Perfect for FHIR Implementation Guide development and distribution.
 
 [![GitHub Release](https://img.shields.io/github/v/release/Gefyra/capabilityStatement-expander)](https://github.com/Gefyra/capabilityStatement-expander/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
