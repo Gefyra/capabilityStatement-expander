@@ -103,7 +103,7 @@ runs:
           echo "$EXPANDER_OUTPUT"
           
           # Extract number of copied files from log output
-          copied_files=$(echo "$EXPANDER_OUTPUT" | grep -o '[0-9]\+ Dateien kopiert' | grep -o '[0-9]\+' || echo "0")
+          copied_files=$(echo "$EXPANDER_OUTPUT" | grep -o '[0-9]\+ files copied' | grep -o '[0-9]\+' || echo "0")
           files_count=$copied_files
           
           echo "files_count=$files_count" >> $GITHUB_OUTPUT

@@ -2,8 +2,8 @@
 """
 FHIR CapabilityStatement Expander
 
-Dieses Script expandiert ein FHIR CapabilityStatement durch rekursive Auflösung aller Imports
-und kopiert alle referenzierten Profile, Examples und Terminologieressourcen.
+This script expands a FHIR CapabilityStatement by recursively resolving all imports
+and copying all referenced profiles, examples, and terminology resources.
 """
 
 import json
@@ -28,15 +28,15 @@ class CapabilityStatementExpander:
         self.processed_imports: Set[str] = set()
         self.referenced_resources: Set[str] = set()
         self.all_resources: Dict[str, Dict] = {}
-        self.resources_by_url: Dict[str, Dict] = {}  # Index für canonical URLs
+        self.resources_by_url: Dict[str, Dict] = {}  # Index for canonical URLs
         
         # Track processed files for reporting
         self.expanded_files: List[Dict] = []
         self.copied_files: List[Dict] = []
         
     def load_all_resources(self):
-        """Lädt alle JSON-Ressourcen aus dem Input-Verzeichnis"""
-        logger.info(f"Lade Ressourcen aus {self.input_dir}")
+        """Loads all JSON resources from the input directory"""
+        logger.info(f"Loading resources from {self.input_dir}")
         
         for json_file in self.input_dir.glob("**/*.json"):
             try:
@@ -51,68 +51,68 @@ class CapabilityStatementExpander:
                         'relative_path': json_file.relative_to(self.input_dir)
                     }
                     
-                    # Index auch nach canonical URL, falls vorhanden
+                    # Index also by canonical URL if available
                     canonical_url = resource.get('url')
                     if canonical_url:
                         self.resources_by_url[canonical_url] = self.all_resources[resource_id]
                     
-                    logger.debug(f"Geladen: {resource['resourceType']}/{resource_id}" + 
+                    logger.debug(f"Loaded: {resource['resourceType']}/{resource_id}" + 
                                (f" ({canonical_url})" if canonical_url else ""))
                     
             except (json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"Konnte {json_file} nicht als FHIR-Ressource laden: {e}")
+                logger.warning(f"Could not load {json_file} as FHIR resource: {e}")
                 
-        logger.info(f"Insgesamt {len(self.all_resources)} Ressourcen geladen")
+        logger.info(f"Total {len(self.all_resources)} resources loaded")
     
     def find_capability_statement(self) -> Dict:
-        """Findet das angegebene CapabilityStatement anhand der canonical URL"""
-        logger.info(f"Suche CapabilityStatement mit URL: {self.capability_statement_url}")
+        """Finds the specified CapabilityStatement by canonical URL"""
+        logger.info(f"Searching for CapabilityStatement with URL: {self.capability_statement_url}")
         
-        # Zuerst nach canonical URL suchen
+        # First search by canonical URL
         if self.capability_statement_url in self.resources_by_url:
             resource_info = self.resources_by_url[self.capability_statement_url]
             cs = resource_info['resource']
             
             if cs.get('resourceType') != 'CapabilityStatement':
-                raise ValueError(f"Ressource mit URL {self.capability_statement_url} ist kein CapabilityStatement")
+                raise ValueError(f"Resource with URL {self.capability_statement_url} is not a CapabilityStatement")
                 
-            logger.info(f"CapabilityStatement gefunden: {cs.get('id')} ({self.capability_statement_url})")
+            logger.info(f"CapabilityStatement found: {cs.get('id')} ({self.capability_statement_url})")
             return cs
         
-        # Fallback: Suche nach ID falls keine URL angegeben
-        # (für Rückwärtskompatibilität)
+        # Fallback: Search by ID if no URL provided
+        # (for backward compatibility)
         if self.capability_statement_url in self.all_resources:
             resource_info = self.all_resources[self.capability_statement_url]
             cs = resource_info['resource']
             
             if cs.get('resourceType') != 'CapabilityStatement':
-                raise ValueError(f"Ressource mit ID {self.capability_statement_url} ist kein CapabilityStatement")
+                raise ValueError(f"Resource with ID {self.capability_statement_url} is not a CapabilityStatement")
                 
-            logger.info(f"CapabilityStatement gefunden per ID: {cs.get('id')}")
+            logger.info(f"CapabilityStatement found by ID: {cs.get('id')}")
             return cs
             
-        # Versuche auch partielle URL-Matches
+        # Try partial URL matches
         for url, resource_info in self.resources_by_url.items():
             if self.capability_statement_url in url or url.endswith(self.capability_statement_url):
                 cs = resource_info['resource']
                 if cs.get('resourceType') == 'CapabilityStatement':
-                    logger.info(f"CapabilityStatement gefunden per URL-Match: {cs.get('id')} ({url})")
+                    logger.info(f"CapabilityStatement found by URL match: {cs.get('id')} ({url})")
                     return cs
         
-        raise FileNotFoundError(f"CapabilityStatement nicht gefunden: {self.capability_statement_url}")    
+        raise FileNotFoundError(f"CapabilityStatement not found: {self.capability_statement_url}")    
     
     def extract_imports(self, resource: Dict) -> List[str]:
-        """Extrahiert alle Import-Referenzen aus einer Ressource"""
+        """Extracts all import references from a resource"""
         imports = []
         
-        # Suche nach imports in verschiedenen Kontexten
+        # Search for imports in various contexts
         if 'imports' in resource:
             if isinstance(resource['imports'], list):
                 imports.extend(resource['imports'])
             else:
                 imports.append(resource['imports'])
         
-        # Suche nach instantiates (erweiterte CapabilityStatements)
+        # Search for instantiates (extended CapabilityStatements)
         if 'instantiates' in resource:
             if isinstance(resource['instantiates'], list):
                 imports.extend(resource['instantiates'])
@@ -122,27 +122,27 @@ class CapabilityStatementExpander:
         return imports
     
     def resolve_reference(self, reference: str) -> str:
-        """Löst eine Referenz in eine Ressourcen-ID oder URL auf"""
-        # Gib die vollständige Referenz zurück für URL-basierte Suche
+        """Resolves a reference to a resource ID or URL"""
+        # Return the complete reference for URL-based search
         return reference.strip()
     
     def expand_capability_statement(self, cs: Dict, visited: Set[str] = None) -> Dict:
-        """Expandiert ein CapabilityStatement rekursiv durch Auflösung aller Imports"""
+        """Expands a CapabilityStatement recursively by resolving all imports"""
         if visited is None:
             visited = set()
             
         cs_id = cs.get('id', 'unknown')
         if cs_id in visited:
-            logger.warning(f"Zirkuläre Referenz erkannt für CapabilityStatement: {cs_id}")
+            logger.warning(f"Circular reference detected for CapabilityStatement: {cs_id}")
             return cs
             
         visited.add(cs_id)
-        logger.info(f"Expandiere CapabilityStatement: {cs_id}")
+        logger.info(f"Expanding CapabilityStatement: {cs_id}")
         
-        # Erstelle eine Kopie für die Expansion
+        # Create a copy for expansion
         expanded_cs = copy.deepcopy(cs)
         
-        # Extrahiere Imports
+        # Extract imports
         imports = self.extract_imports(cs)
         
         for import_ref in imports:
@@ -153,23 +153,23 @@ class CapabilityStatementExpander:
                 
             self.processed_imports.add(import_id)
             
-            # Suche das importierte CapabilityStatement
+            # Search for the imported CapabilityStatement
             imported_resource_info = None
             
-            # Zuerst nach canonical URL suchen
+            # First search by canonical URL
             if import_id in self.resources_by_url:
                 imported_resource_info = self.resources_by_url[import_id]
-            # Fallback nach ID
+            # Fallback by ID
             elif import_id in self.all_resources:
                 imported_resource_info = self.all_resources[import_id]
-            # Versuche URL-Fragmente zu matchen
+            # Try to match URL fragments
             else:
                 for url, resource_info in self.resources_by_url.items():
                     if import_id in url or url.endswith(import_id.split('/')[-1]):
                         imported_resource_info = resource_info
                         break
                         
-                # Fallback: Suche auch in IDs nach dem letzten URL-Segment
+                # Fallback: Also search in IDs for the last URL segment
                 if not imported_resource_info:
                     fragment = import_id.split('/')[-1]
                     if fragment in self.all_resources:
@@ -179,40 +179,40 @@ class CapabilityStatementExpander:
                 imported_resource = imported_resource_info['resource']
                 
                 if imported_resource.get('resourceType') == 'CapabilityStatement':
-                    # Rekursiv expandieren
+                    # Recursively expand
                     imported_expanded = self.expand_capability_statement(imported_resource, visited.copy())
                     
-                    # Merge die Inhalte
+                    # Merge the contents
                     self.merge_capability_statements(expanded_cs, imported_expanded)
                     
-                    logger.info(f"Import aufgelöst: {import_id}")
+                    logger.info(f"Import resolved: {import_id}")
                 else:
                     logger.warning(f"Import ist kein CapabilityStatement: {import_id}")
             else:
-                logger.warning(f"Import nicht gefunden: {import_id}")
+                logger.warning(f"Import not found: {import_id}")
         
-        # Sammle alle referenzierten Ressourcen
+        # Collect all referenced resources
         self.collect_referenced_resources(expanded_cs)
         
-        # Entferne imports und _imports nach der Expansion
+        # Remove imports and _imports after expansion
         self.clean_expanded_capability_statement(expanded_cs)
         
         return expanded_cs
     
     def clean_expanded_capability_statement(self, cs: Dict):
-        """Entfernt imports und _imports aus dem expandierten CapabilityStatement"""
-        # Entferne imports da sie bereits aufgelöst wurden
+        """Removes imports and _imports from the expanded CapabilityStatement"""
+        # Remove imports as they have already been resolved
         if 'imports' in cs:
             del cs['imports']
         
-        # Entferne _imports da sie bereits aufgelöst wurden
+        # Remove _imports as they have already been resolved
         if '_imports' in cs:
             del cs['_imports']
         
-        logger.debug("imports und _imports aus expandiertem CapabilityStatement entfernt")
+        logger.debug("Removed imports and _imports from expanded CapabilityStatement")
     
     def merge_capability_statements(self, target: Dict, source: Dict):
-        """Merged zwei CapabilityStatements zusammen"""
+        """Merges two CapabilityStatements together"""
         
         # Merge rest resources
         if 'rest' in source:
@@ -220,7 +220,7 @@ class CapabilityStatementExpander:
                 target['rest'] = []
             
             for source_rest in source['rest']:
-                # Finde oder erstelle matching rest entry
+                # Find or create matching rest entry
                 target_rest = None
                 for tr in target['rest']:
                     if tr.get('mode') == source_rest.get('mode'):
@@ -236,7 +236,7 @@ class CapabilityStatementExpander:
                             target_rest['resource'] = []
                         
                         for source_resource in source_rest['resource']:
-                            # Deduplizierung basierend auf type
+                            # Deduplication based on type
                             existing = next((r for r in target_rest['resource'] 
                                            if r.get('type') == source_resource.get('type')), None)
                             
@@ -251,11 +251,11 @@ class CapabilityStatementExpander:
             if 'messaging' not in target:
                 target['messaging'] = source['messaging']
             else:
-                # Komplexeres Messaging-Merge könnte hier implementiert werden
+                # More complex messaging merge could be implemented here
                 pass
     
     def merge_supported_profiles(self, target_resource: Dict, source_resource: Dict):
-        """Merged supportedProfile Arrays zwischen zwei Ressourcen"""
+        """Merges supportedProfile arrays between two resources"""
         if 'supportedProfile' in source_resource:
             if 'supportedProfile' not in target_resource:
                 target_resource['supportedProfile'] = []
@@ -265,7 +265,7 @@ class CapabilityStatementExpander:
                     target_resource['supportedProfile'].append(profile)
     
     def collect_referenced_resources(self, cs: Dict):
-        """Sammelt alle in einem CapabilityStatement referenzierten Ressourcen"""
+        """Collects all resources referenced in a CapabilityStatement"""
         
         def extract_references(obj: Any, path: str = ""):
             if isinstance(obj, dict):
@@ -281,7 +281,7 @@ class CapabilityStatementExpander:
                     # ValueSet-Referenzen
                     elif key in ['valueSet', 'binding']:
                         if isinstance(value, dict) and 'valueSet' in value:
-                            # Binding mit valueSet
+                            # Binding with valueSet
                             self.referenced_resources.add(self.resolve_reference(value['valueSet']))
                         elif isinstance(value, str):
                             self.referenced_resources.add(self.resolve_reference(value))
@@ -329,7 +329,7 @@ class CapabilityStatementExpander:
                             if isinstance(comp, str):
                                 self.referenced_resources.add(self.resolve_reference(comp))
                     
-                    # Nested Ressourcen durchsuchen
+                    # Search nested resources
                     else:
                         extract_references(value, f"{path}.{key}")
                         
@@ -338,36 +338,36 @@ class CapabilityStatementExpander:
                     extract_references(item, f"{path}[{i}]")
         
         extract_references(cs)
-        logger.info(f"Referenzierte Ressourcen gesammelt: {len(self.referenced_resources)}")
+        logger.info(f"Referenced resources collected: {len(self.referenced_resources)}")
         logger.debug(f"Referenzen: {sorted(list(self.referenced_resources))}")
         
-        # Extrahiere CodeSystems aus referenzierten ValueSets
+        # Extract CodeSystems from referenced ValueSets
         self.extract_codesystems_from_valuesets()
         
-        # Extrahiere Bindings aus StructureDefinitions
+        # Extract bindings from StructureDefinitions
         self.extract_bindings_from_structuredefinitions()
         
-        # Sammle Examples basierend auf meta.profile
+        # Collect examples based on meta.profile
         self.collect_examples_by_meta_profile()
     
     def extract_bindings_from_structuredefinitions(self):
-        """Extrahiert ValueSet/CodeSystem-Referenzen aus StructureDefinition-Bindings"""
+        """Extracts ValueSet/CodeSystem references from StructureDefinition bindings"""
         for resource_ref in list(self.referenced_resources):
             resource_info = self.find_resource_by_reference(resource_ref)
             if resource_info and resource_info['resource'].get('resourceType') == 'StructureDefinition':
                 self.extract_bindings_from_structuredefinition(resource_info['resource'])
     
     def extract_bindings_from_structuredefinition(self, structdef: Dict):
-        """Extrahiert ValueSet-Referenzen aus den Bindings einer StructureDefinition"""
+        """Extracts ValueSet references from the bindings of a StructureDefinition"""
         def extract_bindings_recursive(obj: Any, path: str = ""):
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     if key == 'binding' and isinstance(value, dict):
-                        # Binding gefunden - extrahiere ValueSet
+                        # Binding found - extract ValueSet
                         if 'valueSet' in value and isinstance(value['valueSet'], str):
                             valueset_ref = self.resolve_reference(value['valueSet'])
                             self.referenced_resources.add(valueset_ref)
-                            logger.debug(f"ValueSet aus StructureDefinition-Binding extrahiert: {valueset_ref}")
+                            logger.debug(f"ValueSet extracted from StructureDefinition binding: {valueset_ref}")
                     else:
                         extract_bindings_recursive(value, f"{path}.{key}")
             elif isinstance(obj, list):
@@ -377,63 +377,63 @@ class CapabilityStatementExpander:
         extract_bindings_recursive(structdef)
     
     def collect_examples_by_meta_profile(self):
-        """Sammelt Examples basierend auf meta.profile Referenzen auf bereits referenzierte Profile"""
-        logger.info("Suche Examples basierend auf meta.profile Referenzen")
+        """Collects Examples based on meta.profile references to already referenced profiles"""
+        logger.info("Searching for examples based on meta.profile references")
         
         initial_count = len(self.referenced_resources)
         examples_found = 0
         
-        # Erstelle Set aller bereits referenzierten Profile URLs
+        # Create set of all already referenced profile URLs
         referenced_profiles = set()
         for resource_ref in self.referenced_resources:
-            # Normalisiere die Referenz für Vergleiche
+            # Normalize the reference for comparisons
             referenced_profiles.add(resource_ref)
         
-        # Durchsuche alle Ressourcen nach meta.profile
+        # Search all resources for meta.profile
         for resource_id, resource_info in self.all_resources.items():
             resource = resource_info['resource']
             
-            # Prüfe ob die Ressource meta.profile hat
+            # Check if the resource has meta.profile
             if 'meta' in resource and 'profile' in resource.get('meta', {}):
                 profiles = resource['meta']['profile']
                 
-                # Normalisiere zu Liste
+                # Normalize to list
                 if isinstance(profiles, str):
                     profiles = [profiles]
                 elif not isinstance(profiles, list):
                     continue
                 
-                # Prüfe ob eines der Profile bereits referenziert ist
+                # Check if one of the profiles is already referenced
                 for profile_url in profiles:
                     normalized_profile = self.resolve_reference(profile_url)
                     
                     if normalized_profile in referenced_profiles:
-                        # Diese Ressource verwendet ein referenziertes Profile -> ist ein Example
+                        # This resource uses a referenced profile -> is an Example
                         resource_url = resource.get('url', resource_id)
                         
                         if resource_url not in self.referenced_resources:
                             self.referenced_resources.add(resource_url)
                             examples_found += 1
                             
-                            logger.info(f"Example über meta.profile gefunden: {resource.get('resourceType', 'Unknown')}/{resource_id} → Profile: {profile_url}")
-                            break  # Ein Match reicht, um die Ressource als Example zu klassifizieren
+                            logger.info(f"Example found via meta.profile: {resource.get('resourceType', 'Unknown')}/{resource_id} → Profile: {profile_url}")
+                            break  # One match is enough to classify the resource as an example
         
-        logger.info(f"Meta.profile Analyse abgeschlossen: {examples_found} Examples gefunden")
+        logger.info(f"Meta.profile analysis completed: {examples_found} examples found")
         
         final_count = len(self.referenced_resources)
         if final_count > initial_count:
-            logger.info(f"Insgesamt {final_count - initial_count} zusätzliche Ressourcen über meta.profile hinzugefügt")
+            logger.info(f"Total {final_count - initial_count} additional resources added via meta.profile")
     
     def extract_codesystems_from_valuesets(self):
-        """Extrahiert CodeSystem-Referenzen iterativ aus bereits referenzierten ValueSets und SearchParameters"""
-        max_iterations = 10  # Verhindere unendliche Schleifen
+        """Extracts CodeSystem references iteratively from already referenced ValueSets and SearchParameters"""
+        max_iterations = 10  # Prevent infinite loops
         iteration = 0
         
         while iteration < max_iterations:
             initial_count = len(self.referenced_resources)
             resources_to_analyze = []
             
-            # Sammle alle ValueSet-, SearchParameter- und StructureDefinition-Referenzen
+            # Collect all ValueSet, SearchParameter and StructureDefinition references
             for resource_ref in list(self.referenced_resources):
                 resource_info = self.find_resource_by_reference(resource_ref)
                 if resource_info:
@@ -441,7 +441,7 @@ class CapabilityStatementExpander:
                     if resource_type in ['ValueSet', 'SearchParameter', 'StructureDefinition']:
                         resources_to_analyze.append(resource_info['resource'])
             
-            # Analysiere Ressourcen nach weiteren Referenzen
+            # Analyze resources for additional references
             for resource in resources_to_analyze:
                 if resource.get('resourceType') == 'ValueSet':
                     self.extract_codesystems_from_valueset(resource)
@@ -452,26 +452,26 @@ class CapabilityStatementExpander:
             
             new_count = len(self.referenced_resources)
             if new_count > initial_count:
-                logger.info(f"Iteration {iteration + 1}: {new_count - initial_count} zusätzliche Ressourcen extrahiert")
+                logger.info(f"Iteration {iteration + 1}: {new_count - initial_count} additional resources extracted")
                 iteration += 1
             else:
-                # Keine neuen Referenzen gefunden, beende die Iteration
+                # No new references found, end iteration
                 break
         
         if iteration >= max_iterations:
-            logger.warning(f"Maximale Iterationsanzahl ({max_iterations}) erreicht bei Referenz-Extraktion")
+            logger.warning(f"Maximum iteration count reached during reference extraction")
     
     def extract_references_from_searchparameter(self, searchparam: Dict):
-        """Extrahiert Referenzen aus einem SearchParameter"""
+        """Extracts references from a SearchParameter"""
         def extract_refs_recursive(obj: Any):
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     if key == 'valueSet' and isinstance(value, str):
                         self.referenced_resources.add(self.resolve_reference(value))
-                        logger.debug(f"ValueSet aus SearchParameter extrahiert: {value}")
+                        logger.debug(f"ValueSet extracted from SearchParameter: {value}")
                     elif key == 'system' and isinstance(value, str):
                         self.referenced_resources.add(self.resolve_reference(value))
-                        logger.debug(f"CodeSystem aus SearchParameter extrahiert: {value}")
+                        logger.debug(f"CodeSystem extracted from SearchParameter: {value}")
                     else:
                         extract_refs_recursive(value)
             elif isinstance(obj, list):
@@ -481,16 +481,16 @@ class CapabilityStatementExpander:
         extract_refs_recursive(searchparam)
     
     def extract_codesystems_from_valueset(self, valueset: Dict):
-        """Extrahiert CodeSystem-Referenzen aus einem einzelnen ValueSet"""
+        """Extracts CodeSystem references from a single ValueSet"""
         def extract_systems_recursive(obj: Any):
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     if key == 'system' and isinstance(value, str):
-                        # CodeSystem-URL gefunden
+                        # CodeSystem URL found
                         self.referenced_resources.add(self.resolve_reference(value))
-                        logger.debug(f"CodeSystem aus ValueSet extrahiert: {value}")
+                        logger.debug(f"CodeSystem extracted from ValueSet: {value}")
                     elif key == 'valueSet' and isinstance(value, str):
-                        # Referenz auf andere ValueSets (für compose.include)
+                        # Reference to other ValueSets (for compose.include)
                         self.referenced_resources.add(self.resolve_reference(value))
                     else:
                         extract_systems_recursive(value)
@@ -501,21 +501,21 @@ class CapabilityStatementExpander:
         extract_systems_recursive(valueset)
     
     def find_resource_by_reference(self, resource_ref: str) -> Dict:
-        """Findet eine Ressource anhand einer Referenz (URL oder ID)"""
-        # Suche nach canonical URL
+        """Finds a resource by reference (URL or ID)"""
+        # Search by canonical URL
         if resource_ref in self.resources_by_url:
             return self.resources_by_url[resource_ref]
         
-        # Fallback nach ID
+        # Fallback by ID
         if resource_ref in self.all_resources:
             return self.all_resources[resource_ref]
         
-        # Versuche URL-Fragmente
+        # Try URL fragments
         for url, resource_info in self.resources_by_url.items():
             if resource_ref in url or url.endswith(resource_ref.split('/')[-1]):
                 return resource_info
-                
-        # Fallback: letztes URL-Segment als ID
+
+        # Fallback: last URL segment as ID
         fragment = resource_ref.split('/')[-1]
         if fragment in self.all_resources:
             return self.all_resources[fragment]
@@ -523,30 +523,30 @@ class CapabilityStatementExpander:
         return None
     
     def copy_referenced_resources(self):
-        """Kopiert alle referenzierten Ressourcen in den Output-Ordner"""
+        """Copies all referenced resources to the output directory"""
         logger.info(f"Kopiere {len(self.referenced_resources)} referenzierte Ressourcen")
         
-        # Erstelle Output-Verzeichnis
+        # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         copied_count = 0
         for resource_ref in self.referenced_resources:
             resource_info = None
             
-            # Suche nach canonical URL
+            # Search by canonical URL
             if resource_ref in self.resources_by_url:
                 resource_info = self.resources_by_url[resource_ref]
-            # Fallback nach ID
+            # Fallback by ID
             elif resource_ref in self.all_resources:
                 resource_info = self.all_resources[resource_ref]
-            # Versuche URL-Fragmente
+            # Try URL fragments
             else:
                 for url, info in self.resources_by_url.items():
                     if resource_ref in url or url.endswith(resource_ref.split('/')[-1]):
                         resource_info = info
                         break
                         
-                # Fallback: letztes URL-Segment als ID
+                # Fallback: last URL-Segment as ID
                 if not resource_info:
                     fragment = resource_ref.split('/')[-1]
                     if fragment in self.all_resources:
@@ -555,12 +555,15 @@ class CapabilityStatementExpander:
             if resource_info:
                 source_path = resource_info['file_path']
                 relative_path = resource_info['relative_path']
-                target_path = self.output_dir / relative_path
                 
-                # Erstelle Zielverzeichnis
+                # Copy all files flat into output directory (without subdirectories)
+                filename = os.path.basename(source_path)
+                target_path = self.output_dir / filename
+                
+                # Create target directory
                 target_path.parent.mkdir(parents=True, exist_ok=True)
                 
-                # Kopiere Datei
+                # Copy file
                 shutil.copy2(source_path, target_path)
                 copied_count += 1
                 
@@ -568,19 +571,19 @@ class CapabilityStatementExpander:
                 resource_type = resource_info['resource'].get('resourceType', 'Unknown')
                 self.copied_files.append({
                     'filename': os.path.basename(target_path),
-                    'relative_path': os.path.relpath(target_path, self.output_dir),
+                    'relative_path': os.path.basename(target_path),  # Flache Struktur
                     'size': os.path.getsize(target_path),
                     'resource_type': resource_type
                 })
                 
-                logger.debug(f"Kopiert: {relative_path}")
+                logger.debug(f"Copied: {filename}")
             else:
-                logger.warning(f"Referenzierte Ressource nicht gefunden: {resource_ref}")
+                logger.warning(f"Referenced resource not found: {resource_ref}")
         
-        logger.info(f"{copied_count} Dateien kopiert")
+        logger.info(f"{copied_count} files copied")
     
     def print_summary_report(self):
-        """Druckt einen strukturierten Bericht über alle verarbeiteten Dateien"""
+        """Prints a structured report of all processed files"""
         print("\n" + "="*50)
         print("FHIR_PROCESSING_SUMMARY_START")
         print(json.dumps({
@@ -594,31 +597,31 @@ class CapabilityStatementExpander:
         print("="*50)
     
     def save_expanded_capability_statement(self, expanded_cs: Dict):
-        """Speichert das expandierte CapabilityStatement"""
+        """Saves the expanded CapabilityStatement"""
         original_id = expanded_cs.get('id', 'unknown')
         expanded_id = f"{original_id}-expanded"
         
-        # Update ID und Metadaten
+        # Update ID and metadata
         expanded_cs['id'] = expanded_id
         if 'name' in expanded_cs:
             expanded_cs['name'] = f"{expanded_cs['name']}Expanded"
         if 'title' in expanded_cs:
             expanded_cs['title'] = f"{expanded_cs['title']} (Expanded)"
         
-        # Entferne imports (da sie jetzt aufgelöst sind)
+        # Remove imports (as they are now resolved)
         if 'imports' in expanded_cs:
             del expanded_cs['imports']
         if 'instantiates' in expanded_cs:
             del expanded_cs['instantiates']
         
-        # Speichere die expandierte Version
+        # Save the expanded version
         output_file = self.output_dir / f"CapabilityStatement-{expanded_id}.json"
         output_file.parent.mkdir(parents=True, exist_ok=True)
         
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(expanded_cs, f, indent=2, ensure_ascii=False)
         
-        logger.info(f"Expandiertes CapabilityStatement gespeichert: {output_file}")
+        logger.info(f"Expanded CapabilityStatement saved: {output_file}")
         
         # Track expanded file
         self.expanded_files.append({
@@ -629,20 +632,20 @@ class CapabilityStatementExpander:
         })
     
     def run(self):
-        """Hauptausführung des Expanders"""
+        """Main execution of the expander"""
         try:
-            logger.info("Starte CapabilityStatement Expansion")
+            logger.info("Starting CapabilityStatement expansion")
             
-            # Lade alle Ressourcen
+            # Load all resources
             self.load_all_resources()
             
-            # Finde das Basis-CapabilityStatement
+            # Find the base CapabilityStatement
             base_cs = self.find_capability_statement()
             
-            # Expandiere das CapabilityStatement
+            # Expand the CapabilityStatement
             expanded_cs = self.expand_capability_statement(base_cs)
             
-            # Speichere das expandierte CapabilityStatement
+            # Save the expanded CapabilityStatement
             self.save_expanded_capability_statement(expanded_cs)
             
             # Kopiere alle referenzierten Ressourcen
@@ -651,17 +654,17 @@ class CapabilityStatementExpander:
             # Drucke strukturierten Bericht
             self.print_summary_report()
             
-            logger.info("CapabilityStatement Expansion erfolgreich abgeschlossen")
+            logger.info("CapabilityStatement expansion completed successfully")
             
         except Exception as e:
-            logger.error(f"Fehler während der Expansion: {e}")
+            logger.error(f"Error during expansion: {e}")
             raise
 
 def main():
     parser = argparse.ArgumentParser(description='FHIR CapabilityStatement Expander')
-    parser.add_argument('input_dir', help='Eingabeordner mit JSON-Dateien')
-    parser.add_argument('output_dir', help='Ausgabeordner für expandierte Ressourcen')
-    parser.add_argument('capability_statement_url', help='Canonical URL des zu expandierenden CapabilityStatements')
+    parser.add_argument('input_dir', help='Input directory with JSON files')
+    parser.add_argument('output_dir', help='Output directory for expanded resources')
+    parser.add_argument('capability_statement_url', help='Canonical URL of the CapabilityStatement to expand')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     
     args = parser.parse_args()
@@ -669,12 +672,12 @@ def main():
     if args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
     
-    # Validiere Input-Verzeichnis
+    # Validate input directory
     if not os.path.isdir(args.input_dir):
-        logger.error(f"Input-Verzeichnis existiert nicht: {args.input_dir}")
+        logger.error(f"Input directory does not exist: {args.input_dir}")
         sys.exit(1)
     
-    # Erstelle Expander und führe aus
+    # Create expander and execute
     expander = CapabilityStatementExpander(
         args.input_dir,
         args.output_dir, 
@@ -683,9 +686,9 @@ def main():
     
     try:
         expander.run()
-        logger.info("Expansion erfolgreich abgeschlossen")
+        logger.info("Expansion completed successfully")
     except Exception as e:
-        logger.error(f"Expansion fehlgeschlagen: {e}")
+        logger.error(f"Expansion failed: {e}")
         sys.exit(1)
 
 if __name__ == '__main__':
