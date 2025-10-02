@@ -27,6 +27,7 @@ class CapabilityStatementExpander:
         self.capability_statement_url = capability_statement_url
         self.processed_imports: Set[str] = set()
         self.referenced_resources: Set[str] = set()
+        self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
         self.all_resources: Dict[str, Dict] = {}
         self.resources_by_url: Dict[str, Dict] = {}  # Index for canonical URLs
         
@@ -179,6 +180,16 @@ class CapabilityStatementExpander:
                 imported_resource = imported_resource_info['resource']
                 
                 if imported_resource.get('resourceType') == 'CapabilityStatement':
+                    # Add the imported CapabilityStatement to imported_capability_statements set
+                    canonical_url = imported_resource.get('url')
+                    if canonical_url:
+                        self.imported_capability_statements.add(canonical_url)
+                    else:
+                        # If no canonical URL, use the resource ID
+                        resource_id = imported_resource.get('id')
+                        if resource_id:
+                            self.imported_capability_statements.add(resource_id)
+                    
                     # Recursively expand
                     imported_expanded = self.expand_capability_statement(imported_resource, visited.copy())
                     
@@ -187,7 +198,7 @@ class CapabilityStatementExpander:
                     
                     logger.info(f"Import resolved: {import_id}")
                 else:
-                    logger.warning(f"Import ist kein CapabilityStatement: {import_id}")
+                    logger.warning(f"Import is not a CapabilityStatement: {import_id}")
             else:
                 logger.warning(f"Import not found: {import_id}")
         
@@ -582,6 +593,108 @@ class CapabilityStatementExpander:
         
         logger.info(f"{copied_count} files copied")
     
+    def copy_imported_capability_statements(self):
+        """Copies all imported CapabilityStatements to the output directory"""
+        logger.info(f"Kopiere {len(self.imported_capability_statements)} importierte CapabilityStatements")
+        
+        # Create output directory
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        copied_count = 0
+        for cs_ref in self.imported_capability_statements:
+            resource_info = None
+            
+            # Search by canonical URL
+            if cs_ref in self.resources_by_url:
+                resource_info = self.resources_by_url[cs_ref]
+            # Fallback by ID
+            elif cs_ref in self.all_resources:
+                resource_info = self.all_resources[cs_ref]
+            # Try URL fragments
+            else:
+                for url, info in self.resources_by_url.items():
+                    if cs_ref in url or url.endswith(cs_ref.split('/')[-1]):
+                        resource_info = info
+                        break
+                        
+                # Fallback: last URL-Segment as ID
+                if not resource_info:
+                    fragment = cs_ref.split('/')[-1]
+                    if fragment in self.all_resources:
+                        resource_info = self.all_resources[fragment]
+            
+            if resource_info:
+                source_path = resource_info['file_path']
+                
+                # Copy all files flat into output directory (without subdirectories)
+                filename = os.path.basename(source_path)
+                target_path = self.output_dir / filename
+                
+                # Create target directory
+                target_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # Copy file
+                shutil.copy2(source_path, target_path)
+                copied_count += 1
+                
+                # Track copied file
+                resource_type = resource_info['resource'].get('resourceType', 'Unknown')
+                self.copied_files.append({
+                    'filename': os.path.basename(target_path),
+                    'relative_path': os.path.basename(target_path),  # Flache Struktur
+                    'size': os.path.getsize(target_path),
+                    'resource_type': resource_type
+                })
+                
+                logger.info(f"Copied imported CapabilityStatement: {filename}")
+            else:
+                logger.warning(f"Imported CapabilityStatement not found: {cs_ref}")
+        
+        logger.info(f"{copied_count} imported CapabilityStatements copied")
+    
+    def copy_original_capability_statement(self, cs: Dict):
+        """Copies the original CapabilityStatement to the output directory"""
+        logger.info("Kopiere das ursprüngliche CapabilityStatement")
+        
+        # Create output directory
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Find the original CapabilityStatement file
+        cs_url = cs.get('url')
+        cs_id = cs.get('id')
+        
+        resource_info = None
+        if cs_url and cs_url in self.resources_by_url:
+            resource_info = self.resources_by_url[cs_url]
+        elif cs_id and cs_id in self.all_resources:
+            resource_info = self.all_resources[cs_id]
+        
+        if resource_info:
+            source_path = resource_info['file_path']
+            
+            # Copy all files flat into output directory (without subdirectories)
+            filename = os.path.basename(source_path)
+            target_path = self.output_dir / filename
+            
+            # Create target directory
+            target_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Copy file
+            shutil.copy2(source_path, target_path)
+            
+            # Track copied file
+            resource_type = resource_info['resource'].get('resourceType', 'Unknown')
+            self.copied_files.append({
+                'filename': os.path.basename(target_path),
+                'relative_path': os.path.basename(target_path),  # Flache Struktur
+                'size': os.path.getsize(target_path),
+                'resource_type': resource_type
+            })
+            
+            logger.info(f"Copied original CapabilityStatement: {filename}")
+        else:
+            logger.warning("Original CapabilityStatement file not found for copying")
+    
     def print_summary_report(self):
         """Prints a structured report of all processed files"""
         print("\n" + "="*50)
@@ -642,16 +755,22 @@ class CapabilityStatementExpander:
             # Find the base CapabilityStatement
             base_cs = self.find_capability_statement()
             
+            # Copy the original CapabilityStatement
+            self.copy_original_capability_statement(base_cs)
+            
             # Expand the CapabilityStatement
             expanded_cs = self.expand_capability_statement(base_cs)
             
             # Save the expanded CapabilityStatement
             self.save_expanded_capability_statement(expanded_cs)
             
-            # Kopiere alle referenzierten Ressourcen
+            # Copy all imported CapabilityStatements
+            self.copy_imported_capability_statements()
+            
+            # Copy all referenced resources
             self.copy_referenced_resources()
             
-            # Drucke strukturierten Bericht
+            # Print structured report
             self.print_summary_report()
             
             logger.info("CapabilityStatement expansion completed successfully")
