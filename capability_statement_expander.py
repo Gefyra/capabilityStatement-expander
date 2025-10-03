@@ -697,6 +697,35 @@ class CapabilityStatementExpander:
     
     def print_summary_report(self):
         """Prints a structured report of all processed files"""
+        
+        # Separate CapabilityStatements from other copied files
+        capability_statements = [f for f in self.copied_files if f['resource_type'] == 'CapabilityStatement']
+        other_resources = [f for f in self.copied_files if f['resource_type'] != 'CapabilityStatement']
+        
+        print("\n" + "📄 Processed FHIR Resources:")
+        print("=" * 32)
+        
+        print("🔧 Expanded Resources:")
+        for file in self.expanded_files:
+            print(f"📋 {file['filename']} (expanded)")
+        
+        if capability_statements:
+            print("\n📋 CapabilityStatements:")
+            for file in capability_statements:
+                print(f"  📋 {file['filename']} [{file['resource_type']}]")
+        
+        print("\n📁 Copied Resources:")
+        for file in other_resources:
+            print(f"  📋 {file['filename']} [{file['resource_type']}]")
+        
+        print("\n" + "=" * 32)
+        print("📊 Summary:")
+        print(f"  🔧 Expanded: {len(self.expanded_files)} files")
+        print(f"  📋 CapabilityStatements: {len(capability_statements)} files")
+        print(f"  📁 Other Resources: {len(other_resources)} files")
+        print(f"  📋 Total: {len(self.expanded_files) + len(self.copied_files)} files processed")
+        
+        # Also print the original JSON summary for compatibility
         print("\n" + "="*50)
         print("FHIR_PROCESSING_SUMMARY_START")
         print(json.dumps({
@@ -704,6 +733,8 @@ class CapabilityStatementExpander:
             'copied_files': self.copied_files,
             'total_expanded': len(self.expanded_files),
             'total_copied': len(self.copied_files),
+            'total_capability_statements': len(capability_statements),
+            'total_other_resources': len(other_resources),
             'total_files': len(self.expanded_files) + len(self.copied_files)
         }, indent=2))
         print("FHIR_PROCESSING_SUMMARY_END")
