@@ -358,6 +358,9 @@ class CapabilityStatementExpander:
         # Extract bindings from StructureDefinitions
         self.extract_bindings_from_structuredefinitions()
         
+        # Collect parent profiles from StructureDefinitions
+        self.collect_parent_profiles()
+        
         # Collect examples based on meta.profile
         self.collect_examples_by_meta_profile()
     
@@ -386,6 +389,90 @@ class CapabilityStatementExpander:
                     extract_bindings_recursive(item, f"{path}[{i}]")
         
         extract_bindings_recursive(structdef)
+    
+    def collect_parent_profiles(self):
+        """Collects all parent profiles recursively from referenced StructureDefinitions"""
+        logger.info("Collecting parent profiles from StructureDefinitions")
+        
+        # Get all currently referenced StructureDefinitions
+        structuredefs_to_process = []
+        for resource_ref in list(self.referenced_resources):
+            resource_info = self.find_resource_by_reference(resource_ref)
+            if resource_info and resource_info['resource'].get('resourceType') == 'StructureDefinition':
+                structuredefs_to_process.append((resource_ref, resource_info['resource']))
+        
+        total_parents_found = 0
+        
+        # Process each StructureDefinition and collect its complete parent hierarchy
+        for resource_ref, structdef in structuredefs_to_process:
+            parents_found = self.extract_parent_profile_recursive(structdef, resource_ref)
+            total_parents_found += parents_found
+        
+        if total_parents_found > 0:
+            logger.info(f"Total parent profiles found: {total_parents_found}")
+        
+        logger.info("Parent profile collection completed")
+    
+    def extract_parent_profile_recursive(self, structdef: Dict, profile_ref: str, depth: int = 0, max_depth: int = 50, visited: Set[str] = None) -> int:
+        """Recursively extracts all parent profiles (baseDefinition) from a StructureDefinition hierarchy
+        
+        Returns the number of parent profiles found in this hierarchy
+        """
+        if visited is None:
+            visited = set()
+        
+        # Prevent infinite recursion
+        if depth >= max_depth:
+            logger.warning(f"Maximum recursion depth ({max_depth}) reached for profile: {profile_ref}")
+            return 0
+        
+        base_definition = structdef.get('baseDefinition')
+        
+        if not base_definition:
+            # No parent profile defined - end of hierarchy
+            return 0
+        
+        # Check for circular references
+        if base_definition in visited:
+            logger.warning(f"Circular reference detected: {base_definition} in hierarchy of {profile_ref}")
+            return 0
+        
+        visited.add(base_definition)
+        
+        # Check if the parent profile is already in our referenced resources
+        if base_definition in self.referenced_resources:
+            # Already collected, but we still need to check its parents
+            parent_resource_info = self.find_resource_by_reference(base_definition)
+            if parent_resource_info and parent_resource_info['resource'].get('resourceType') == 'StructureDefinition':
+                # Continue with parent's parent
+                return self.extract_parent_profile_recursive(parent_resource_info['resource'], base_definition, depth + 1, max_depth, visited)
+            return 0
+        
+        # Try to find the parent profile in our resources
+        parent_resource_info = self.find_resource_by_reference(base_definition)
+        
+        if parent_resource_info:
+            # Parent profile found in our resources
+            if parent_resource_info['resource'].get('resourceType') == 'StructureDefinition':
+                self.referenced_resources.add(base_definition)
+                logger.info(f"Parent profile added: {base_definition} (parent of {profile_ref})")
+                
+                # Recursively collect parent's parents
+                parents_found = 1 + self.extract_parent_profile_recursive(
+                    parent_resource_info['resource'], 
+                    base_definition, 
+                    depth + 1, 
+                    max_depth, 
+                    visited
+                )
+                return parents_found
+            else:
+                logger.warning(f"Base definition is not a StructureDefinition: {base_definition}")
+                return 0
+        else:
+            # Parent profile not found - likely from FHIR core spec or dependency
+            logger.warning(f"Parent profile not found (likely from FHIR core or dependency): {base_definition} (parent of {profile_ref})")
+            return 0
     
     def collect_examples_by_meta_profile(self):
         """Collects Examples based on meta.profile references to already referenced profiles"""
