@@ -16,6 +16,9 @@ from typing import Dict, List, Set, Any
 import logging
 import copy
 
+# Version
+__version__ = "0.3.0"
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -886,6 +889,7 @@ class CapabilityStatementExpander:
     def run(self):
         """Main execution of the expander"""
         try:
+            logger.info(f"FHIR CapabilityStatement Expander v{__version__}")
             logger.info("Starting CapabilityStatement expansion")
             
             # Load all resources
