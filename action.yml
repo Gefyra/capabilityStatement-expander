@@ -77,6 +77,17 @@ runs:
       run: |
         echo "🚀 Starting FHIR CapabilityStatement Expander..."
         
+        # Display action version from git tag/ref
+        if [ -n "$GITHUB_ACTION_REF" ]; then
+          echo "📌 Action Version: $GITHUB_ACTION_REF"
+        elif [ -f "$GITHUB_ACTION_PATH/.git/HEAD" ]; then
+          ACTION_VERSION=$(cat "$GITHUB_ACTION_PATH/.git/HEAD" 2>/dev/null || echo "unknown")
+          echo "📌 Action Version: $ACTION_VERSION"
+        else
+          echo "📌 Action Version: (version info not available)"
+        fi
+        echo ""
+        
         # Determine verbose flag - auto-enable when GitHub Actions debug logging is active
         VERBOSE_FLAG=""
         if [ "${{ inputs.verbose }}" = "true" ] || [ "$ACTIONS_STEP_DEBUG" = "true" ]; then
