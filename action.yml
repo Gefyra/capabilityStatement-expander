@@ -93,11 +93,14 @@ runs:
         if [ -f "$SCRIPT_PATH" ]; then
           echo "✅ Script found, executing..."
           
+          # Store capability_statement_url in environment variable to handle multiline JSON
+          export CS_URL='${{ inputs.capability_statement_url }}'
+          
           # Capture output to extract copied files count
           EXPANDER_OUTPUT=$(python "$SCRIPT_PATH" \
             "${{ inputs.input_directory }}" \
             "${{ inputs.output_directory }}" \
-            "${{ inputs.capability_statement_url }}" \
+            "$CS_URL" \
             ${{ inputs.verbose == 'true' && '--verbose' || '' }} 2>&1)
           
           echo "$EXPANDER_OUTPUT"
