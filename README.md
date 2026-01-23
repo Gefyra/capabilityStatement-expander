@@ -80,7 +80,7 @@ Enable detailed logging to troubleshoot expansion issues:
 
 ## 🚀 Usage as GitHub Action
 
-### Simple Usage
+### Simple Usage (Single CapabilityStatement)
 
 ```yaml
 name: Expand FHIR CapabilityStatement
@@ -110,6 +110,68 @@ jobs:
       with:
         name: expanded-fhir-resources
         path: './expanded-resources'
+```
+
+### Expanding Multiple CapabilityStatements
+
+```yaml
+name: Expand Multiple FHIR CapabilityStatements
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Expand Multiple CapabilityStatements
+      uses: Gefyra/capabilityStatement-expander@v0
+      with:
+        input_directory: './fhir-resources'
+        output_directory: './expanded-resources'
+        # Use toJSON() to convert YAML list to JSON array
+        capability_statement_url: ${{ toJSON(fromJSON('[
+          "https://example.org/fhir/CapabilityStatement/ServerCapability",
+          "https://example.org/fhir/CapabilityStatement/ClientCapability"
+        ]')) }}
+        
+    - name: Upload Results
+      uses: actions/upload-artifact@v4
+      with:
+        name: expanded-fhir-resources
+        path: './expanded-resources'
+```
+
+### Using Matrix Strategy for Multiple CapabilityStatements
+
+```yaml
+name: Expand CapabilityStatements with Matrix
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  expand:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        capability_statement_urls:
+          - https://gematik.de/fhir/isik/CapabilityStatement/ISiKCapabilityStatementBasis
+          - https://gematik.de/fhir/isik/CapabilityStatement/ISiKCapabilityStatementSubscription
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Expand CapabilityStatement
+      uses: Gefyra/capabilityStatement-expander@v0
+      with:
+        input_directory: './Resources/fsh-generated/resources'
+        output_directory: './publisher-input/resources'
+        # Convert YAML list to JSON array
+        capability_statement_url: ${{ toJSON(matrix.capability_statement_urls) }}
 ```
 
 ### Advanced Configuration
@@ -154,10 +216,10 @@ uses: Gefyra/capabilityStatement-expander@main
 ## 📥 Action Inputs
 
 | Input | Description | Required | Default |
-|-------|-------------|----------|---------|
+|-------|-------------|----------|---------||
 | `input_directory` | Directory with FHIR JSON files | ✅ | `./input` |
 | `output_directory` | Target directory for expanded resources | ✅ | `./output` |
-| `capability_statement_url` | Canonical URL of the CapabilityStatement | ✅ | - |
+| `capability_statement_url` | Canonical URL(s) of the CapabilityStatement(s) to expand.<br>Can be:<br>• Single URL: `"https://example.org/CS"`<br>• JSON array: `["url1", "url2"]`<br>• YAML list (use `toJSON()`): `${{ toJSON(matrix.urls) }}` | ✅ | - |
 | `verbose` | Enable verbose logging | ❌ | `false` |
 | `python_version` | Python version for execution | ❌ | `3.11` |
 
@@ -179,15 +241,23 @@ python capability_statement_expander.py <input_dir> <output_dir> <capability_sta
 **Parameters:**
 - `input_dir`: Directory with JSON files (CapabilityStatements, profiles, etc.)
 - `output_dir`: Target directory for expanded resources
-- `capability_statement_url`: Canonical URL of the CapabilityStatement to expand
+- `capability_statement_url`: Canonical URL(s) of the CapabilityStatement(s) to expand
+  - Single URL: `"https://example.org/CS"`
+  - JSON array: `'["url1", "url2"]'` (note the quotes!)
 
 **Options:**
 - `--verbose` or `-v`: Enables detailed logging
 
-### Local Example
+### Local Examples
 
+**Single CapabilityStatement:**
 ```bash
 python capability_statement_expander.py ./fhir-resources ./output "http://example.org/CapabilityStatement/MyCapabilityStatement" --verbose
+```
+
+**Multiple CapabilityStatements:**
+```bash
+python capability_statement_expander.py ./fhir-resources ./output '["http://example.org/CapabilityStatement/CS1", "http://example.org/CapabilityStatement/CS2"]' --verbose
 ```
 
 ## 🧪 Tests

@@ -20,7 +20,7 @@ inputs:
     required: true
     default: './output'
   capability_statement_url:
-    description: 'Canonical URL of the CapabilityStatement to expand'
+    description: 'Canonical URL(s) of the CapabilityStatement(s) to expand. Can be a single URL string or a JSON array of URLs (use toJSON() for YAML lists).'
     required: true
   verbose:
     description: 'Enable verbose logging'

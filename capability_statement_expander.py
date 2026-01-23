@@ -21,13 +21,14 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class CapabilityStatementExpander:
-    def __init__(self, input_dir: str, output_dir: str, capability_statement_url: str):
+    def __init__(self, input_dir: str, output_dir: str, capability_statement_urls: List[str]):
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
-        self.capability_statement_url = capability_statement_url
+        self.capability_statement_urls = capability_statement_urls if isinstance(capability_statement_urls, list) else [capability_statement_urls]
         self.processed_imports: Set[str] = set()
         self.referenced_resources: Set[str] = set()
         self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
+        self.original_capability_statements: Set[str] = set()  # Track original CapabilityStatements to expand
         self.all_resources: Dict[str, Dict] = {}
         self.resources_by_url: Dict[str, Dict] = {}  # Index for canonical URLs
         
@@ -65,42 +66,57 @@ class CapabilityStatementExpander:
                 
         logger.info(f"Total {len(self.all_resources)} resources loaded")
     
-    def find_capability_statement(self) -> Dict:
-        """Finds the specified CapabilityStatement by canonical URL"""
-        logger.info(f"Searching for CapabilityStatement with URL: {self.capability_statement_url}")
+    def find_capability_statements(self) -> List[Dict]:
+        """Finds all specified CapabilityStatements by canonical URLs"""
+        logger.info(f"Searching for {len(self.capability_statement_urls)} CapabilityStatement(s)")
+        
+        found_statements = []
+        
+        for cs_url in self.capability_statement_urls:
+            logger.info(f"Searching for CapabilityStatement with URL: {cs_url}")
+            cs = self._find_single_capability_statement(cs_url)
+            if cs:
+                found_statements.append(cs)
+            else:
+                raise FileNotFoundError(f"CapabilityStatement not found: {cs_url}")
+        
+        return found_statements
+    
+    def _find_single_capability_statement(self, capability_statement_url: str) -> Dict:
+        """Finds a single CapabilityStatement by canonical URL"""
         
         # First search by canonical URL
-        if self.capability_statement_url in self.resources_by_url:
-            resource_info = self.resources_by_url[self.capability_statement_url]
+        if capability_statement_url in self.resources_by_url:
+            resource_info = self.resources_by_url[capability_statement_url]
             cs = resource_info['resource']
             
             if cs.get('resourceType') != 'CapabilityStatement':
-                raise ValueError(f"Resource with URL {self.capability_statement_url} is not a CapabilityStatement")
+                raise ValueError(f"Resource with URL {capability_statement_url} is not a CapabilityStatement")
                 
-            logger.info(f"CapabilityStatement found: {cs.get('id')} ({self.capability_statement_url})")
+            logger.info(f"CapabilityStatement found: {cs.get('id')} ({capability_statement_url})")
             return cs
         
         # Fallback: Search by ID if no URL provided
         # (for backward compatibility)
-        if self.capability_statement_url in self.all_resources:
-            resource_info = self.all_resources[self.capability_statement_url]
+        if capability_statement_url in self.all_resources:
+            resource_info = self.all_resources[capability_statement_url]
             cs = resource_info['resource']
             
             if cs.get('resourceType') != 'CapabilityStatement':
-                raise ValueError(f"Resource with ID {self.capability_statement_url} is not a CapabilityStatement")
+                raise ValueError(f"Resource with ID {capability_statement_url} is not a CapabilityStatement")
                 
             logger.info(f"CapabilityStatement found by ID: {cs.get('id')}")
             return cs
             
         # Try partial URL matches
         for url, resource_info in self.resources_by_url.items():
-            if self.capability_statement_url in url or url.endswith(self.capability_statement_url):
+            if capability_statement_url in url or url.endswith(capability_statement_url):
                 cs = resource_info['resource']
                 if cs.get('resourceType') == 'CapabilityStatement':
                     logger.info(f"CapabilityStatement found by URL match: {cs.get('id')} ({url})")
                     return cs
         
-        raise FileNotFoundError(f"CapabilityStatement not found: {self.capability_statement_url}")    
+        return None    
     
     def extract_imports(self, resource: Dict) -> List[str]:
         """Extracts all import references from a resource"""
@@ -689,6 +705,11 @@ class CapabilityStatementExpander:
         
         copied_count = 0
         for cs_ref in self.imported_capability_statements:
+            # Skip if this is one of the original CapabilityStatements we're expanding
+            if cs_ref in self.original_capability_statements:
+                logger.debug(f"Skipping original CapabilityStatement: {cs_ref}")
+                continue
+            
             resource_info = None
             
             # Search by canonical URL
@@ -870,22 +891,33 @@ class CapabilityStatementExpander:
             # Load all resources
             self.load_all_resources()
             
-            # Find the base CapabilityStatement
-            base_cs = self.find_capability_statement()
+            # Find all base CapabilityStatements
+            base_capability_statements = self.find_capability_statements()
             
-            # Copy the original CapabilityStatement
-            self.copy_original_capability_statement(base_cs)
+            # Process each CapabilityStatement
+            for base_cs in base_capability_statements:
+                logger.info(f"\n{'='*60}")
+                logger.info(f"Processing CapabilityStatement: {base_cs.get('id')}")
+                logger.info(f"{'='*60}")
+                
+                # Track this as an original CapabilityStatement
+                cs_url = base_cs.get('url')
+                if cs_url:
+                    self.original_capability_statements.add(cs_url)
+                
+                # Copy the original CapabilityStatement
+                self.copy_original_capability_statement(base_cs)
+                
+                # Expand the CapabilityStatement
+                expanded_cs = self.expand_capability_statement(base_cs)
+                
+                # Save the expanded CapabilityStatement
+                self.save_expanded_capability_statement(expanded_cs)
             
-            # Expand the CapabilityStatement
-            expanded_cs = self.expand_capability_statement(base_cs)
-            
-            # Save the expanded CapabilityStatement
-            self.save_expanded_capability_statement(expanded_cs)
-            
-            # Copy all imported CapabilityStatements
+            # Copy all imported CapabilityStatements (only once for all)
             self.copy_imported_capability_statements()
             
-            # Copy all referenced resources
+            # Copy all referenced resources (only once for all)
             self.copy_referenced_resources()
             
             # Print structured report
@@ -901,7 +933,7 @@ def main():
     parser = argparse.ArgumentParser(description='FHIR CapabilityStatement Expander')
     parser.add_argument('input_dir', help='Input directory with JSON files')
     parser.add_argument('output_dir', help='Output directory for expanded resources')
-    parser.add_argument('capability_statement_url', help='Canonical URL of the CapabilityStatement to expand')
+    parser.add_argument('capability_statement_url', help='Canonical URL(s) of the CapabilityStatement(s) to expand. Can be a single URL or a JSON array of URLs.')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     
     args = parser.parse_args()
@@ -914,11 +946,30 @@ def main():
         logger.error(f"Input directory does not exist: {args.input_dir}")
         sys.exit(1)
     
+    # Parse capability_statement_url - can be a single URL or JSON array
+    capability_statement_urls = args.capability_statement_url
+    
+    # Try to parse as JSON array first
+    if capability_statement_urls.startswith('['):
+        try:
+            capability_statement_urls = json.loads(capability_statement_urls)
+            if not isinstance(capability_statement_urls, list):
+                logger.error("capability_statement_url must be a string or JSON array")
+                sys.exit(1)
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON array for capability_statement_url: {e}")
+            sys.exit(1)
+    else:
+        # Single URL - convert to list
+        capability_statement_urls = [capability_statement_urls]
+    
+    logger.info(f"Processing {len(capability_statement_urls)} CapabilityStatement(s)")
+    
     # Create expander and execute
     expander = CapabilityStatementExpander(
         args.input_dir,
         args.output_dir, 
-        args.capability_statement_url
+        capability_statement_urls
     )
     
     try:
