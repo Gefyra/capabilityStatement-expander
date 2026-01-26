@@ -24,10 +24,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class CapabilityStatementExpander:
-    def __init__(self, input_dir: str, output_dir: str, capability_statement_urls: List[str]):
+    def __init__(self, input_dir: str, output_dir: str, capability_statement_urls: List[str], verbose: bool = False):
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.capability_statement_urls = capability_statement_urls if isinstance(capability_statement_urls, list) else [capability_statement_urls]
+        self.verbose = verbose
         self.processed_imports: Set[str] = set()
         self.referenced_resources: Set[str] = set()
         self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
@@ -873,10 +874,8 @@ class CapabilityStatementExpander:
         print(f"  📁 Other Resources: {len(other_resources)} files")
         print(f"  📋 Total: {len(self.expanded_files) + len(self.copied_files)} files processed")
         
-        # Also print the original JSON summary for compatibility
-        print("\n" + "="*50)
-        print("FHIR_PROCESSING_SUMMARY_START")
-        print(json.dumps({
+        # Create JSON summary for action.yml parsing
+        summary_data = {
             'expanded_files': self.expanded_files,
             'copied_files': self.copied_files,
             'total_expanded': len(self.expanded_files),
@@ -884,9 +883,17 @@ class CapabilityStatementExpander:
             'total_capability_statements': len(capability_statements),
             'total_other_resources': len(other_resources),
             'total_files': len(self.expanded_files) + len(self.copied_files)
-        }, indent=2))
-        print("FHIR_PROCESSING_SUMMARY_END")
-        print("="*50)
+        }
+        
+        # Write JSON summary to file for action.yml to parse
+        summary_file = self.output_dir / '.fhir-processing-summary.json'
+        with open(summary_file, 'w', encoding='utf-8') as f:
+            json.dump(summary_data, f, indent=2)
+        
+        # Only show JSON in stdout if verbose mode is enabled
+        if self.verbose:
+            print("\n📋 Processing Summary (JSON):")
+            print(json.dumps(summary_data, indent=2))
     
     def save_expanded_capability_statement(self, expanded_cs: Dict):
         """Saves the expanded CapabilityStatement"""
@@ -1023,7 +1030,8 @@ def main():
     expander = CapabilityStatementExpander(
         args.input_dir,
         args.output_dir, 
-        capability_statement_urls
+        capability_statement_urls,
+        verbose=args.verbose
     )
     
     try:

@@ -96,12 +96,12 @@ runs:
           CS_URLS_FILE=$(mktemp)
           echo '${{ inputs.capability_statement_url }}' > "$CS_URLS_FILE"
           
-          # Capture output to extract copied files count
-          EXPANDER_OUTPUT=$(python "$SCRIPT_PATH" \
+          # Run the expander
+          python "$SCRIPT_PATH" \
             "${{ inputs.input_directory }}" \
             "${{ inputs.output_directory }}" \
             "@$CS_URLS_FILE" \
-            ${{ inputs.verbose == 'true' && '--verbose' || '' }} 2>&1)
+            ${{ inputs.verbose == 'true' && '--verbose' || '' }}
           
           # Clean up temporary file
           rm -f "$CS_URLS_FILE"
@@ -120,11 +120,6 @@ runs:
           
           echo "✅ Capability Statement successfully expanded to ${{ inputs.output_directory }}"
           echo "✅ Successfully processed $files_count files"
-          
-          # Export output for next step
-          echo "EXPANDER_OUTPUT<<EOF" >> $GITHUB_ENV
-          echo "$EXPANDER_OUTPUT" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
         else
           echo "❌ Script not found at expected location: $SCRIPT_PATH"
           echo "Action path: ${{ github.action_path }}"
@@ -135,26 +130,25 @@ runs:
     - name: List Processed Files
       shell: bash
       run: |
-        # Extract the JSON summary from the Python output
-        SUMMARY_JSON=$(echo "$EXPANDER_OUTPUT" | sed -n '/FHIR_PROCESSING_SUMMARY_START/,/FHIR_PROCESSING_SUMMARY_END/p' | sed '1d;$d')
+        # Read the JSON summary file created by the expander
+        SUMMARY_FILE="${{ inputs.output_directory }}/.fhir-processing-summary.json"
         
-        if [ -n "$SUMMARY_JSON" ]; then
+        if [ -f "$SUMMARY_FILE" ]; then
           echo "📄 Processed FHIR Resources:"
           echo "================================"
           
-          # Parse totals using simple grep
-          expanded_count=$(echo "$SUMMARY_JSON" | grep -o '"total_expanded": [0-9]*' | grep -o '[0-9]*' || echo "0")
-          copied_count=$(echo "$SUMMARY_JSON" | grep -o '"total_copied": [0-9]*' | grep -o '[0-9]*' || echo "0")
-          total_files=$(echo "$SUMMARY_JSON" | grep -o '"total_files": [0-9]*' | grep -o '[0-9]*' || echo "0")
+          # Parse totals using simple grep from the file
+          expanded_count=$(grep -o '"total_expanded": [0-9]*' "$SUMMARY_FILE" | grep -o '[0-9]*' || echo "0")
+          copied_count=$(grep -o '"total_copied": [0-9]*' "$SUMMARY_FILE" | grep -o '[0-9]*' || echo "0")
+          total_files=$(grep -o '"total_files": [0-9]*' "$SUMMARY_FILE" | grep -o '[0-9]*' || echo "0")
           
           echo "🔧 Expanded Resources:"
           if [ "$expanded_count" -gt 0 ]; then
             # Extract relative_path from expanded_files section
-            echo "$SUMMARY_JSON" | sed -n '/"expanded_files"/,/"copied_files"/p' | \
+            sed -n '/"expanded_files"/,/"copied_files"/p' "$SUMMARY_FILE" | \
             grep '"relative_path"' | \
             sed 's/.*"relative_path": *"\([^"]*\)".*/  📋 \1/' | \
             while read -r line; do
-              # Get size for this file (simplified)
               echo "$line (expanded)"
             done
           else
@@ -165,26 +159,22 @@ runs:
           echo "📁 Copied Resources:"
           if [ "$copied_count" -gt 0 ]; then
             # Extract from copied_files section - use line-by-line processing
-            echo "$SUMMARY_JSON" | sed -n '/"copied_files"/,/"total_expanded"/p' | \
+            sed -n '/"copied_files"/,/"total_expanded"/p' "$SUMMARY_FILE" | \
             grep -E '"relative_path"|"resource_type"' | \
             paste - - | \
             sed 's/.*"relative_path": *"\([^"]*\)".*"resource_type": *"\([^"]*\)".*/  📋 \1 [\2]/' || {
               # Simple fallback
-              echo "$SUMMARY_JSON" | grep '"relative_path"' | tail -n +2 | \
+              grep '"relative_path"' "$SUMMARY_FILE" | tail -n +2 | \
               sed 's/.*"relative_path": *"\([^"]*\)".*/  📋 \1/'
             }
           else
             echo "  (No copied resources found)"
           fi
           
-          echo ""
-          echo "================================"
           echo "📊 Summary:"
           echo "  🔧 Expanded: $expanded_count files"
           echo "  📁 Copied: $copied_count files"
           echo "  📋 Total: $total_files files processed"
         else
-          echo "⚠️  Could not parse processing summary from output"
-          echo "Raw output for debugging:"
-          echo "$EXPANDER_OUTPUT" | tail -20
+          echo "⚠️  Processing summary file not found: $SUMMARY_FILE"
         fi
