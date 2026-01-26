@@ -18,7 +18,7 @@ import logging
 import copy
 
 # Version
-__version__ = "0.4.1"
+__version__ = "0.4.2"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
