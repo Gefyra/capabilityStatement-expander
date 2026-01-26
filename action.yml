@@ -96,22 +96,25 @@ runs:
           CS_URLS_FILE=$(mktemp)
           echo '${{ inputs.capability_statement_url }}' > "$CS_URLS_FILE"
           
-          # Run the expander
-          python "$SCRIPT_PATH" \
+          # Run the expander and capture output
+          EXPANDER_OUTPUT=$(python "$SCRIPT_PATH" \
             "${{ inputs.input_directory }}" \
             "${{ inputs.output_directory }}" \
             "@$CS_URLS_FILE" \
-            ${{ inputs.verbose == 'true' && '--verbose' || '' }}
+            ${{ inputs.verbose == 'true' && '--verbose' || '' }} 2>&1)
           
           # Clean up temporary file
           rm -f "$CS_URLS_FILE"
           
+          # Display output
           echo "$EXPANDER_OUTPUT"
           
-          # Extract number of copied files from log output
-          copied_files=$(echo "$EXPANDER_OUTPUT" | grep -o '[0-9]\+ files copied' | grep -o '[0-9]\+' || echo "0")
-          files_count=$copied_files
+          # Extract summary file path from output
+          SUMMARY_FILE=$(echo "$EXPANDER_OUTPUT" | grep '^SUMMARY_FILE_PATH=' | cut -d= -f2)
+          echo "summary_file=$SUMMARY_FILE" >> $GITHUB_OUTPUT
           
+          # Extract file count from summary file or output
+          files_count=$(grep -o '"total_files": [0-9]*' "$SUMMARY_FILE" 2>/dev/null | grep -o '[0-9]*' || echo "0")
           echo "files_count=$files_count" >> $GITHUB_OUTPUT
           
           # Find expanded CapabilityStatement file
@@ -130,8 +133,19 @@ runs:
     - name: List Processed Files
       shell: bash
       run: |
-        # Read the JSON summary file created by the expander
-        SUMMARY_FILE="${{ inputs.output_directory }}/.fhir-processing-summary.json"
+        # Read the JSON summary file path from previous step
+        SUMMARY_FILE="${{ steps.expand.outputs.summary_file }}"
+        
+        # Fallback to RUNNER_TEMP (GitHub Actions) or TMPDIR/tmp
+        if [ -z "$SUMMARY_FILE" ] || [ ! -f "$SUMMARY_FILE" ]; then
+          if [ -n "$RUNNER_TEMP" ]; then
+            SUMMARY_FILE="$RUNNER_TEMP/fhir-processing-summary.json"
+          elif [ -n "$TMPDIR" ]; then
+            SUMMARY_FILE="${TMPDIR%/}/fhir-processing-summary.json"
+          else
+            SUMMARY_FILE="/tmp/fhir-processing-summary.json"
+          fi
+        fi
         
         if [ -f "$SUMMARY_FILE" ]; then
           echo "📄 Processed FHIR Resources:"

@@ -11,6 +11,7 @@ import os
 import shutil
 import argparse
 import sys
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Set, Any
 import logging
@@ -885,10 +886,17 @@ class CapabilityStatementExpander:
             'total_files': len(self.expanded_files) + len(self.copied_files)
         }
         
-        # Write JSON summary to file for action.yml to parse
-        summary_file = self.output_dir / '.fhir-processing-summary.json'
+        # Write JSON summary to temp file for action.yml to parse
+        # Use temp directory to avoid committing the file
+        temp_dir = Path(tempfile.gettempdir())
+        summary_file = temp_dir / 'fhir-processing-summary.json'
         with open(summary_file, 'w', encoding='utf-8') as f:
             json.dump(summary_data, f, indent=2)
+        
+        logger.debug(f"Processing summary written to: {summary_file}")
+        
+        # Output the summary file path for GitHub Actions to use
+        print(f"\nSUMMARY_FILE_PATH={summary_file}")
         
         # Only show JSON in stdout if verbose mode is enabled
         if self.verbose:
