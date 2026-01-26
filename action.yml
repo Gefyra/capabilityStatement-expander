@@ -91,15 +91,20 @@ runs:
         if [ -f "$SCRIPT_PATH" ]; then
           echo "✅ Script found, executing..."
           
-          # Store capability_statement_url in environment variable to handle multiline JSON
-          export CS_URL='${{ inputs.capability_statement_url }}'
+          # Write capability_statement_url to temporary file to avoid "Argument list too long" error
+          # This handles cases with many CapabilityStatements where JSON becomes very large
+          CS_URLS_FILE=$(mktemp)
+          echo '${{ inputs.capability_statement_url }}' > "$CS_URLS_FILE"
           
           # Capture output to extract copied files count
           EXPANDER_OUTPUT=$(python "$SCRIPT_PATH" \
             "${{ inputs.input_directory }}" \
             "${{ inputs.output_directory }}" \
-            "$CS_URL" \
+            "@$CS_URLS_FILE" \
             ${{ inputs.verbose == 'true' && '--verbose' || '' }} 2>&1)
+          
+          # Clean up temporary file
+          rm -f "$CS_URLS_FILE"
           
           echo "$EXPANDER_OUTPUT"
           

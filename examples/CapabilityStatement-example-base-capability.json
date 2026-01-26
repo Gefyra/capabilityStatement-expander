@@ -14,6 +14,16 @@
   "imports": [
     "http://example.org/CapabilityStatement/imported-capability"
   ],
+  "_imports": [
+    {
+      "extension": [
+        {
+          "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+          "valueCode": "SHALL"
+        }
+      ]
+    }
+  ],
   "rest": [
     {
       "mode": "server",

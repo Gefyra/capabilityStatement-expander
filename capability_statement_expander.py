@@ -32,6 +32,8 @@ class CapabilityStatementExpander:
         self.referenced_resources: Set[str] = set()
         self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
         self.original_capability_statements: Set[str] = set()  # Track original CapabilityStatements to expand
+        self.shall_imports: Set[str] = set()  # Track imports with SHALL expectation
+        self.current_import_expectation: str = 'SHALL'  # Track current import's expectation during expansion
         self.all_resources: Dict[str, Dict] = {}
         self.resources_by_url: Dict[str, Dict] = {}  # Index for canonical URLs
         
@@ -121,23 +123,41 @@ class CapabilityStatementExpander:
         
         return None    
     
-    def extract_imports(self, resource: Dict) -> List[str]:
-        """Extracts all import references from a resource"""
+    def extract_imports(self, resource: Dict) -> List[tuple]:
+        """Extracts all import references from a resource with their expectations
+        
+        Returns: List of tuples (import_url, expectation) where expectation is 'SHALL' or 'MAY'
+        """
         imports = []
         
         # Search for imports in various contexts
         if 'imports' in resource:
-            if isinstance(resource['imports'], list):
-                imports.extend(resource['imports'])
-            else:
-                imports.append(resource['imports'])
+            import_list = resource['imports'] if isinstance(resource['imports'], list) else [resource['imports']]
+            
+            # Check for _imports with expectation extensions
+            _imports = resource.get('_imports', [])
+            if not isinstance(_imports, list):
+                _imports = [_imports]
+            
+            for i, import_url in enumerate(import_list):
+                expectation = 'SHALL'  # Default expectation
+                
+                # Try to find expectation in _imports
+                if i < len(_imports) and _imports[i]:
+                    extensions = _imports[i].get('extension', [])
+                    for ext in extensions:
+                        if 'expectation' in ext.get('url', ''):
+                            expectation = ext.get('valueCode', 'SHALL').upper()
+                            break
+                
+                imports.append((import_url, expectation))
         
         # Search for instantiates (extended CapabilityStatements)
         if 'instantiates' in resource:
-            if isinstance(resource['instantiates'], list):
-                imports.extend(resource['instantiates'])
-            else:
-                imports.append(resource['instantiates'])
+            instantiate_list = resource['instantiates'] if isinstance(resource['instantiates'], list) else [resource['instantiates']]
+            # Instantiates are always treated as SHALL
+            for inst_url in instantiate_list:
+                imports.append((inst_url, 'SHALL'))
         
         return imports
     
@@ -162,16 +182,23 @@ class CapabilityStatementExpander:
         # Create a copy for expansion
         expanded_cs = copy.deepcopy(cs)
         
-        # Extract imports
+        # Extract imports with expectations
         imports = self.extract_imports(cs)
         
-        for import_ref in imports:
+        for import_ref, expectation in imports:
             import_id = self.resolve_reference(import_ref)
             
             if import_id in self.processed_imports:
                 continue
                 
             self.processed_imports.add(import_id)
+            
+            # Track SHALL imports
+            if expectation == 'SHALL':
+                self.shall_imports.add(import_id)
+                logger.info(f"Import with SHALL expectation: {import_id} (resources will be collected)")
+            else:
+                logger.info(f"Import with {expectation} expectation: {import_id} (resources will NOT be collected)")
             
             # Search for the imported CapabilityStatement
             imported_resource_info = None
@@ -209,8 +236,15 @@ class CapabilityStatementExpander:
                         if resource_id:
                             self.imported_capability_statements.add(resource_id)
                     
+                    # Set current expectation context
+                    previous_expectation = self.current_import_expectation
+                    self.current_import_expectation = expectation
+                    
                     # Recursively expand
                     imported_expanded = self.expand_capability_statement(imported_resource, visited.copy())
+                    
+                    # Restore previous expectation
+                    self.current_import_expectation = previous_expectation
                     
                     # Merge the contents
                     self.merge_capability_statements(expanded_cs, imported_expanded)
@@ -221,8 +255,11 @@ class CapabilityStatementExpander:
             else:
                 logger.warning(f"Import not found: {import_id}")
         
-        # Collect all referenced resources
-        self.collect_referenced_resources(expanded_cs)
+        # Collect all referenced resources (only if SHALL expectation)
+        if self.current_import_expectation == 'SHALL':
+            self.collect_referenced_resources(expanded_cs)
+        else:
+            logger.info(f"Skipping resource collection for {cs_id} (MAY expectation)")
         
         # Remove imports and _imports after expansion
         self.clean_expanded_capability_statement(expanded_cs)
@@ -950,8 +987,21 @@ def main():
         logger.error(f"Input directory does not exist: {args.input_dir}")
         sys.exit(1)
     
-    # Parse capability_statement_url - can be a single URL or JSON array
+    # Parse capability_statement_url - can be a single URL, JSON array, or @file reference
     capability_statement_urls = args.capability_statement_url
+    
+    # Check if it's a file reference (@filename)
+    if capability_statement_urls.startswith('@'):
+        file_path = capability_statement_urls[1:]  # Remove @ prefix
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                capability_statement_urls = f.read().strip()
+        except FileNotFoundError:
+            logger.error(f"File not found: {file_path}")
+            sys.exit(1)
+        except Exception as e:
+            logger.error(f"Error reading file {file_path}: {e}")
+            sys.exit(1)
     
     # Try to parse as JSON array first
     if capability_statement_urls.startswith('['):
