@@ -25,11 +25,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class CapabilityStatementExpander:
-    def __init__(self, input_dir: str, output_dir: str, capability_statement_urls: List[str], verbose: bool = False):
+    def __init__(self, input_dir: str, output_dir: str, capability_statement_urls: List[str], verbose: bool = False, clean_output: bool = True):
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.capability_statement_urls = capability_statement_urls if isinstance(capability_statement_urls, list) else [capability_statement_urls]
         self.verbose = verbose
+        self.clean_output = clean_output
         self.processed_imports: Set[str] = set()
         self.referenced_resources: Set[str] = set()
         self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
@@ -682,6 +683,12 @@ class CapabilityStatementExpander:
         """Copies all referenced resources to the output directory"""
         logger.info(f"Kopiere {len(self.referenced_resources)} referenzierte Ressourcen")
         
+        # Clean output directory if requested
+        if self.clean_output:
+            if self.output_dir.exists():
+                logger.info(f"Cleaning output directory: {self.output_dir}")
+                shutil.rmtree(self.output_dir)
+        
         # Create output directory
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -991,6 +998,7 @@ def main():
     parser.add_argument('output_dir', help='Output directory for expanded resources')
     parser.add_argument('capability_statement_url', help='Canonical URL(s) of the CapabilityStatement(s) to expand. Can be a single URL or a JSON array of URLs.')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
+    parser.add_argument('--no-clean', action='store_true', help='Do not clean output directory before expansion (by default, output directory is cleaned)')
     
     args = parser.parse_args()
     
@@ -1039,7 +1047,8 @@ def main():
         args.input_dir,
         args.output_dir, 
         capability_statement_urls,
-        verbose=args.verbose
+        verbose=args.verbose,
+        clean_output=not args.no_clean  # Invert no_clean flag to get clean_output
     )
     
     try:

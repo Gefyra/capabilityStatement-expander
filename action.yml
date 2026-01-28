@@ -26,6 +26,10 @@ inputs:
     description: 'Enable verbose logging'
     required: false
     default: 'false'
+  no_clean:
+    description: 'Do not clean output directory before expansion (by default, output directory is cleaned)'
+    required: false
+    default: 'false'
   python_version:
     description: 'Python version for execution'
     required: false
@@ -101,7 +105,8 @@ runs:
             "${{ inputs.input_directory }}" \
             "${{ inputs.output_directory }}" \
             "@$CS_URLS_FILE" \
-            ${{ inputs.verbose == 'true' && '--verbose' || '' }} 2>&1)
+            ${{ inputs.verbose == 'true' && '--verbose' || '' }} \
+            ${{ inputs.no_clean == 'true' && '--no-clean' || '' }} 2>&1)
           
           # Clean up temporary file
           rm -f "$CS_URLS_FILE"

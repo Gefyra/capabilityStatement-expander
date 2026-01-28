@@ -221,6 +221,7 @@ uses: Gefyra/capabilityStatement-expander@main
 | `output_directory` | Target directory for expanded resources | ✅ | `./output` |
 | `capability_statement_url` | Canonical URL(s) of the CapabilityStatement(s) to expand.<br>Can be:<br>• Single URL: `"https://example.org/CS"`<br>• JSON array: `["url1", "url2"]`<br>• YAML list (use `toJSON()`): `${{ toJSON(matrix.urls) }}` | ✅ | - |
 | `verbose` | Enable verbose logging | ❌ | `false` |
+| `no_clean` | Do not clean output directory before expansion (by default, directory is cleaned) | ❌ | `false` |
 | `python_version` | Python version for execution | ❌ | `3.11` |
 
 ## 📤 Action Outputs
@@ -247,6 +248,7 @@ python capability_statement_expander.py <input_dir> <output_dir> <capability_sta
 
 **Options:**
 - `--verbose` or `-v`: Enables detailed logging
+- `--no-clean`: Do not clean output directory before expansion (by default, the output directory is cleaned to avoid stale files)
 
 ### Local Examples
 
