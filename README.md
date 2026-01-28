@@ -222,6 +222,7 @@ uses: Gefyra/capabilityStatement-expander@main
 | `capability_statement_url` | Canonical URL(s) of the CapabilityStatement(s) to expand.<br>Can be:<br>• Single URL: `"https://example.org/CS"`<br>• JSON array: `["url1", "url2"]`<br>• YAML list (use `toJSON()`): `${{ toJSON(matrix.urls) }}` | ✅ | - |
 | `verbose` | Enable verbose logging | ❌ | `false` |
 | `no_clean` | Do not clean output directory before expansion (by default, directory is cleaned) | ❌ | `false` |
+| `expectation_filter` | Filter imports by minimum expectation level.<br>`SHALL` = only SHALL<br>`SHOULD` = SHALL + SHOULD<br>`MAY` = SHALL + SHOULD + MAY<br>Default: import all expectations<br>**Note:** `SHOULD-NOT` is never imported | ❌ | - |
 | `python_version` | Python version for execution | ❌ | `3.11` |
 
 ## 📤 Action Outputs
@@ -249,6 +250,7 @@ python capability_statement_expander.py <input_dir> <output_dir> <capability_sta
 **Options:**
 - `--verbose` or `-v`: Enables detailed logging
 - `--no-clean`: Do not clean output directory before expansion (by default, the output directory is cleaned to avoid stale files)
+- `--expectation-filter {SHALL|SHOULD|MAY}`: Filter imports by minimum expectation level. `SHALL` imports only SHALL, `SHOULD` imports SHALL+SHOULD, `MAY` imports SHALL+SHOULD+MAY. Default: import all expectations. **Note:** `SHOULD-NOT` is never imported regardless of filter.
 
 ### Local Examples
 

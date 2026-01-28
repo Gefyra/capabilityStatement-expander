@@ -25,12 +25,13 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger(__name__)
 
 class CapabilityStatementExpander:
-    def __init__(self, input_dir: str, output_dir: str, capability_statement_urls: List[str], verbose: bool = False, clean_output: bool = True):
+    def __init__(self, input_dir: str, output_dir: str, capability_statement_urls: List[str], verbose: bool = False, clean_output: bool = True, expectation_filter: str = None):
         self.input_dir = Path(input_dir)
         self.output_dir = Path(output_dir)
         self.capability_statement_urls = capability_statement_urls if isinstance(capability_statement_urls, list) else [capability_statement_urls]
         self.verbose = verbose
         self.clean_output = clean_output
+        self.expectation_filter = expectation_filter.upper() if expectation_filter else None  # None = import all
         self.processed_imports: Set[str] = set()
         self.referenced_resources: Set[str] = set()
         self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
@@ -40,10 +41,39 @@ class CapabilityStatementExpander:
         self.all_resources: Dict[str, Dict] = {}
         self.resources_by_url: Dict[str, Dict] = {}  # Index for canonical URLs
         
+        # Expectation hierarchy: SHALL > SHOULD > MAY
+        # Note: SHOULD-NOT is never imported
+        self.expectation_hierarchy = {
+            'SHALL': ['SHALL'],
+            'SHOULD': ['SHALL', 'SHOULD'],
+            'MAY': ['SHALL', 'SHOULD', 'MAY']
+        }
+        
         # Track processed files for reporting
         self.expanded_files: List[Dict] = []
         self.copied_files: List[Dict] = []
         
+    def should_import_expectation(self, expectation: str) -> bool:
+        """Check if an import with given expectation should be processed based on filter
+        
+        Args:
+            expectation: The expectation value (SHALL, SHOULD, MAY, SHOULD-NOT)
+            
+        Returns:
+            True if the import should be processed, False otherwise
+        """
+        # SHOULD-NOT is never imported
+        if expectation == 'SHOULD-NOT':
+            return False
+        
+        # No filter = import everything (except SHOULD-NOT)
+        if self.expectation_filter is None:
+            return True
+        
+        # Check if expectation is in the allowed list for the filter
+        allowed_expectations = self.expectation_hierarchy.get(self.expectation_filter, [])
+        return expectation in allowed_expectations
+    
     def load_all_resources(self):
         """Loads all JSON resources from the input directory"""
         logger.info(f"Loading resources from {self.input_dir}")
@@ -196,12 +226,17 @@ class CapabilityStatementExpander:
                 
             self.processed_imports.add(import_id)
             
-            # Track SHALL imports
+            # Check if this expectation should be imported based on filter
+            should_import = self.should_import_expectation(expectation)
+            
+            # Track SHALL imports (for backwards compatibility)
             if expectation == 'SHALL':
                 self.shall_imports.add(import_id)
-                logger.info(f"Import with SHALL expectation: {import_id} (resources will be collected)")
+            
+            if should_import:
+                logger.info(f"Import with {expectation} expectation: {import_id} (resources will be collected)")
             else:
-                logger.info(f"Import with {expectation} expectation: {import_id} (resources will NOT be collected)")
+                logger.info(f"Import with {expectation} expectation: {import_id} (SKIPPED by expectation filter '{self.expectation_filter}')")
             
             # Search for the imported CapabilityStatement
             imported_resource_info = None
@@ -258,11 +293,11 @@ class CapabilityStatementExpander:
             else:
                 logger.warning(f"Import not found: {import_id}")
         
-        # Collect all referenced resources (only if SHALL expectation)
-        if self.current_import_expectation == 'SHALL':
+        # Collect all referenced resources (based on expectation filter)
+        if self.should_import_expectation(self.current_import_expectation):
             self.collect_referenced_resources(expanded_cs)
         else:
-            logger.info(f"Skipping resource collection for {cs_id} (MAY expectation)")
+            logger.info(f"Skipping resource collection for {cs_id} ({self.current_import_expectation} expectation filtered out)")
         
         # Remove imports and _imports after expansion
         self.clean_expanded_capability_statement(expanded_cs)
@@ -859,29 +894,6 @@ class CapabilityStatementExpander:
         capability_statements = [f for f in self.copied_files if f['resource_type'] == 'CapabilityStatement']
         other_resources = [f for f in self.copied_files if f['resource_type'] != 'CapabilityStatement']
         
-        print("\n" + "📄 Processed FHIR Resources:")
-        print("=" * 32)
-        
-        print("🔧 Expanded Resources:")
-        for file in self.expanded_files:
-            print(f"📋 {file['filename']} (expanded)")
-        
-        if capability_statements:
-            print("\n📋 CapabilityStatements:")
-            for file in capability_statements:
-                print(f"  📋 {file['filename']} [{file['resource_type']}]")
-        
-        print("\n📁 Copied Resources:")
-        for file in other_resources:
-            print(f"  📋 {file['filename']} [{file['resource_type']}]")
-        
-        print("\n" + "=" * 32)
-        print("📊 Summary:")
-        print(f"  🔧 Expanded: {len(self.expanded_files)} files")
-        print(f"  📋 CapabilityStatements: {len(capability_statements)} files")
-        print(f"  📁 Other Resources: {len(other_resources)} files")
-        print(f"  📋 Total: {len(self.expanded_files) + len(self.copied_files)} files processed")
-        
         # Create JSON summary for action.yml parsing
         summary_data = {
             'expanded_files': self.expanded_files,
@@ -903,10 +915,33 @@ class CapabilityStatementExpander:
         logger.debug(f"Processing summary written to: {summary_file}")
         
         # Output the summary file path for GitHub Actions to use
-        print(f"\nSUMMARY_FILE_PATH={summary_file}")
+        print(f"SUMMARY_FILE_PATH={summary_file}")
         
-        # Only show JSON in stdout if verbose mode is enabled
+        # Only show verbose formatted output if requested
         if self.verbose:
+            print("\n" + "📄 Processed FHIR Resources:")
+            print("=" * 32)
+            
+            print("🔧 Expanded Resources:")
+            for file in self.expanded_files:
+                print(f"📋 {file['filename']} (expanded)")
+            
+            if capability_statements:
+                print("\n📋 CapabilityStatements:")
+                for file in capability_statements:
+                    print(f"  📋 {file['filename']} [{file['resource_type']}]")
+            
+            print("\n📁 Copied Resources:")
+            for file in other_resources:
+                print(f"  📋 {file['filename']} [{file['resource_type']}]")
+            
+            print("\n" + "=" * 32)
+            print("📊 Summary:")
+            print(f"  🔧 Expanded: {len(self.expanded_files)} files")
+            print(f"  📋 CapabilityStatements: {len(capability_statements)} files")
+            print(f"  📁 Other Resources: {len(other_resources)} files")
+            print(f"  📋 Total: {len(self.expanded_files) + len(self.copied_files)} files processed")
+            
             print("\n📋 Processing Summary (JSON):")
             print(json.dumps(summary_data, indent=2))
     
@@ -999,6 +1034,7 @@ def main():
     parser.add_argument('capability_statement_url', help='Canonical URL(s) of the CapabilityStatement(s) to expand. Can be a single URL or a JSON array of URLs.')
     parser.add_argument('--verbose', '-v', action='store_true', help='Verbose logging')
     parser.add_argument('--no-clean', action='store_true', help='Do not clean output directory before expansion (by default, output directory is cleaned)')
+    parser.add_argument('--expectation-filter', choices=['SHALL', 'SHOULD', 'MAY'], help='Filter imports by minimum expectation level. SHALL=only SHALL, SHOULD=SHALL+SHOULD, MAY=SHALL+SHOULD+MAY. Default: import all expectations (SHOULD-NOT is never imported).')
     
     args = parser.parse_args()
     
@@ -1048,7 +1084,8 @@ def main():
         args.output_dir, 
         capability_statement_urls,
         verbose=args.verbose,
-        clean_output=not args.no_clean  # Invert no_clean flag to get clean_output
+        clean_output=not args.no_clean,  # Invert no_clean flag to get clean_output
+        expectation_filter=args.expectation_filter
     )
     
     try:

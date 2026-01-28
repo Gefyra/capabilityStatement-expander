@@ -30,6 +30,10 @@ inputs:
     description: 'Do not clean output directory before expansion (by default, output directory is cleaned)'
     required: false
     default: 'false'
+  expectation_filter:
+    description: 'Filter imports by minimum expectation level. SHALL=only SHALL, SHOULD=SHALL+SHOULD, MAY=SHALL+SHOULD+MAY. Default: import all expectations. Note: SHOULD-NOT is never imported.'
+    required: false
+    default: ''
   python_version:
     description: 'Python version for execution'
     required: false
@@ -106,7 +110,8 @@ runs:
             "${{ inputs.output_directory }}" \
             "@$CS_URLS_FILE" \
             ${{ inputs.verbose == 'true' && '--verbose' || '' }} \
-            ${{ inputs.no_clean == 'true' && '--no-clean' || '' }} 2>&1)
+            ${{ inputs.no_clean == 'true' && '--no-clean' || '' }} \
+            ${{ inputs.expectation_filter != '' && format('--expectation-filter {0}', inputs.expectation_filter) || '' }} 2>&1)
           
           # Clean up temporary file
           rm -f "$CS_URLS_FILE"
