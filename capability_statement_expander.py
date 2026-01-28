@@ -718,14 +718,7 @@ class CapabilityStatementExpander:
         """Copies all referenced resources to the output directory"""
         logger.info(f"Kopiere {len(self.referenced_resources)} referenzierte Ressourcen")
         
-        # Clean output directory if requested
-        if self.clean_output:
-            if self.output_dir.exists():
-                logger.info(f"Cleaning output directory: {self.output_dir}")
-                shutil.rmtree(self.output_dir)
-        
-        # Create output directory
-        self.output_dir.mkdir(parents=True, exist_ok=True)
+        # Output directory already created in run(), no need to clean here
         
         copied_count = 0
         for resource_ref in self.referenced_resources:
@@ -985,6 +978,15 @@ class CapabilityStatementExpander:
         try:
             logger.info(f"FHIR CapabilityStatement Expander v{__version__}")
             logger.info("Starting CapabilityStatement expansion")
+            
+            # Clean output directory if requested (before any file operations)
+            if self.clean_output:
+                if self.output_dir.exists():
+                    logger.info(f"Cleaning output directory: {self.output_dir}")
+                    shutil.rmtree(self.output_dir)
+            
+            # Create output directory
+            self.output_dir.mkdir(parents=True, exist_ok=True)
             
             # Load all resources
             self.load_all_resources()
