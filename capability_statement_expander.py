@@ -977,6 +977,7 @@ class CapabilityStatementExpander:
         """Main execution of the expander"""
         try:
             logger.info(f"FHIR CapabilityStatement Expander v{__version__}")
+            logger.info(f"Processing {len(self.capability_statement_urls)} CapabilityStatement(s)")
             logger.info("Starting CapabilityStatement expansion")
             
             # Clean output directory if requested (before any file operations)
@@ -1077,8 +1078,6 @@ def main():
     else:
         # Single URL - convert to list
         capability_statement_urls = [capability_statement_urls]
-    
-    logger.info(f"Processing {len(capability_statement_urls)} CapabilityStatement(s)")
     
     # Create expander and execute
     expander = CapabilityStatementExpander(
