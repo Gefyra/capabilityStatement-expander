@@ -18,7 +18,7 @@ import logging
 import copy
 
 # Version
-__version__ = "0.6.1"
+__version__ = "0.6.2"
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -621,17 +621,24 @@ class CapabilityStatementExpander:
         max_iterations = 10  # Prevent infinite loops
         iteration = 0
         
+        # Track which resources we've already analyzed to avoid re-analyzing resources from previous imports
+        analyzed_resources = set()
+        
         while iteration < max_iterations:
             initial_count = len(self.referenced_resources)
             resources_to_analyze = []
             
-            # Collect all ValueSet, SearchParameter and StructureDefinition references
+            # Collect only NEW ValueSet, SearchParameter and StructureDefinition references (not yet analyzed)
             for resource_ref in list(self.referenced_resources):
+                if resource_ref in analyzed_resources:
+                    continue  # Skip already analyzed resources
+                    
                 resource_info = self.find_resource_by_reference(resource_ref)
                 if resource_info:
                     resource_type = resource_info['resource'].get('resourceType')
                     if resource_type in ['ValueSet', 'SearchParameter', 'StructureDefinition']:
                         resources_to_analyze.append(resource_info['resource'])
+                        analyzed_resources.add(resource_ref)
             
             # Analyze resources for additional references
             for resource in resources_to_analyze:
