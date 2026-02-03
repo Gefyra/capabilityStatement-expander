@@ -3,7 +3,8 @@ name: Release Action
 on:
   push:
     tags:
-      - 'v*'  # Triggers on version tags like v1.0.0, v1.2.3, etc.
+      - 'v[0-9]+.[0-9]+.[0-9]+'  # Triggers only on full semantic version tags like v0.7.4, v1.2.3, etc.
+      # Excludes major version tags like v0, v1 to prevent accidental version resets
 
 jobs:
   release:
