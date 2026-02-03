@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.4"
+__version__ = "0.7.5"
 
 # Constants
 class Expectation(Enum):
@@ -56,6 +56,13 @@ class ResourceTypes:
     CODE_SYSTEM = 'CodeSystem'
     SEARCH_PARAMETER = 'SearchParameter'
 
+# FHIR Core base resource URL patterns (resources not expected in input directory)
+FHIR_CORE_PATTERNS = [
+    'http://hl7.org/fhir/StructureDefinition/',
+    'http://terminology.hl7.org/',
+    'http://hl7.org/fhir/SearchParameter/'
+]
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -74,6 +81,7 @@ class CapabilityStatementExpander:
         self.original_capability_statements: Set[str] = set()  # Track original CapabilityStatements to expand
         self.shall_imports: Set[str] = set()  # Track imports with SHALL expectation
         self.current_import_expectation: str = Expectation.SHALL.value  # Track current import's expectation during expansion
+        self.circular_refs_reported: Set[str] = set()  # Track reported circular references to avoid duplicate warnings
         self.all_resources: Dict[str, Dict] = {}
         self.resources_by_url: Dict[str, Dict] = {}  # Index for canonical URLs
         
@@ -580,7 +588,10 @@ class CapabilityStatementExpander:
         
         # Check for circular references
         if base_definition in visited:
-            logger.warning(f"Circular reference detected: {base_definition} in hierarchy of {profile_ref}")
+            # Only log once per unique circular reference to avoid spam
+            if base_definition not in self.circular_refs_reported:
+                logger.debug(f"Circular reference detected: {base_definition} (FHIR core base resource)")
+                self.circular_refs_reported.add(base_definition)
             return 0
         
         visited.add(base_definition)
@@ -613,11 +624,20 @@ class CapabilityStatementExpander:
                 )
                 return parents_found
             else:
-                logger.warning(f"Base definition is not a StructureDefinition: {base_definition}")
+                # Don't warn for FHIR core base resources
+                is_fhir_core = any(base_definition.startswith(pattern) for pattern in FHIR_CORE_PATTERNS)
+                if not is_fhir_core:
+                    logger.warning(f"Base definition is not a StructureDefinition: {base_definition}")
+                else:
+                    logger.debug(f"Base definition is FHIR core resource: {base_definition}")
                 return 0
         else:
-            # Parent profile not found - likely from FHIR core spec or dependency
-            logger.warning(f"Parent profile not found (likely from FHIR core or dependency): {base_definition} (parent of {profile_ref})")
+            # Parent profile not found - check if it's a FHIR core resource
+            is_fhir_core = any(base_definition.startswith(pattern) for pattern in FHIR_CORE_PATTERNS)
+            if is_fhir_core:
+                logger.debug(f"Parent is FHIR core resource (not in input): {base_definition}")
+            else:
+                logger.warning(f"Parent profile not found: {base_definition} (parent of {profile_ref})")
             return 0
     
     def collect_examples_by_meta_profile(self):
@@ -790,7 +810,17 @@ class CapabilityStatementExpander:
         # Output directory already created in run(), no need to clean here
         
         copied_count = 0
+        skipped_fhir_core = 0
+        skipped_not_found = 0
+        
         for resource_ref in sorted(self.referenced_resources):
+            # Skip FHIR core resources (not expected to be in input directory)
+            is_fhir_core = any(resource_ref.startswith(pattern) for pattern in FHIR_CORE_PATTERNS)
+            if is_fhir_core:
+                skipped_fhir_core += 1
+                logger.debug(f"Skipped FHIR core resource: {resource_ref}")
+                continue
+            
             resource_info = self.find_resource_by_reference(resource_ref)
             
             if resource_info:
@@ -819,9 +849,10 @@ class CapabilityStatementExpander:
                 
                 logger.debug(f"Copied: {filename}")
             else:
+                skipped_not_found += 1
                 logger.warning(f"Referenced resource not found: {resource_ref}")
         
-        logger.info(f"{copied_count} files copied")
+        logger.info(f"{copied_count} files copied, {skipped_fhir_core} FHIR core resources skipped, {skipped_not_found} not found")
     
     def copy_imported_capability_statements(self):
         """Copies all imported CapabilityStatements to the output directory"""

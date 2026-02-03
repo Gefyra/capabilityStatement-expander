@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-02-03
+
+### Fixed
+- **Reduced log spam**: Circular reference warnings are now logged only once per unique reference
+- **FHIR Core resource handling**: Added intelligent filtering for FHIR core resources (StructureDefinition/Patient, Observation, etc.)
+  - Circular references to FHIR core resources now logged at DEBUG level instead of WARNING
+  - Missing parent profiles from FHIR core are now logged at DEBUG level (expected behavior)
+  - Base definitions pointing to FHIR core resources no longer generate warnings
+- **Better statistics**: `copy_referenced_resources()` now reports:
+  - Number of files copied
+  - Number of FHIR core resources skipped (not in input directory)
+  - Number of resources not found
+- **Performance**: FHIR core resources are now skipped during copy operations (prevents unnecessary warnings)
+
+### Added
+- `FHIR_CORE_PATTERNS` constant to identify FHIR core base resources
+- `circular_refs_reported` set to track and deduplicate circular reference warnings
+- Enhanced logging in `copy_referenced_resources()` with separate counters for different skip reasons
+
 ## [0.7.0] - 2026-02-03
 
 ### Added

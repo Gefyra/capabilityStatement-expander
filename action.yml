@@ -109,7 +109,7 @@ runs:
             "${{ inputs.input_directory }}" \
             "${{ inputs.output_directory }}" \
             "@$CS_URLS_FILE" \
-            ${{ inputs.verbose == 'true' && '--verbose' || '' }} \
+            $VERBOSE_FLAG \
             ${{ inputs.no_clean == 'true' && '--no-clean' || '' }} \
             ${{ inputs.expectation_filter != '' && format('--expectation-filter {0}', inputs.expectation_filter) || '' }} 2>&1)
           
