@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0"
+__version__ = "0.7.3"
 
 # Constants
 class Expectation(Enum):
