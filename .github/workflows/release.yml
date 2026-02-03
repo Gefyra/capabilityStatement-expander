@@ -33,19 +33,20 @@ jobs:
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
         git add capability_statement_expander.py
-        git diff-index --quiet HEAD || git commit -m "chore: update version to ${{ steps.version.outputs.version }}"
-        git push origin HEAD:main || echo "No changes to commit"
+        if git diff-index --quiet HEAD; then
+          echo "ℹ️ Version already correct - no changes to commit"
+        else
+          git commit -m "chore: update version to ${{ steps.version.outputs.version }}"
+          git push origin HEAD:main
+        fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Create Release
-      id: create_release
-      uses: actions/create-release@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v2
       with:
         tag_name: ${{ steps.version.outputs.tag }}
-        release_name: FHIR CapabilityStatement Expander ${{ steps.version.outputs.tag }}
+        name: FHIR CapabilityStatement Expander ${{ steps.version.outputs.tag }}
         body: |
           ## 🚀 FHIR CapabilityStatement Expander ${{ steps.version.outputs.tag }}
           
@@ -74,6 +75,8 @@ jobs:
           For full documentation, see the [README](https://github.com/Gefyra/capabilityStatement-expander/blob/main/README.md).
         draft: false
         prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
     - name: Update major version tag
       run: |
