@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.3"
+__version__ = "0.7.4"
 
 # Constants
 class Expectation(Enum):
@@ -636,6 +636,10 @@ class CapabilityStatementExpander:
         # Search all resources for meta.profile
         for resource_id, resource_info in self.all_resources.items():
             resource = resource_info['resource']
+            
+            # Skip StructureDefinitions - they are definitions, not examples
+            if resource.get('resourceType') == ResourceTypes.STRUCTURE_DEFINITION:
+                continue
             
             # Check if the resource has meta.profile
             if 'meta' in resource and 'profile' in resource.get('meta', {}):
