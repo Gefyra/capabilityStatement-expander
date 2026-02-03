@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.1"
+__version__ = "0.7.2"
 
 # Constants
 class Expectation(Enum):
@@ -465,7 +465,7 @@ class CapabilityStatementExpander:
                                     logger.warning(f"    Resolved to: {resolved_ref}")
                                     logger.warning(f"    Current import expectation: {self.current_import_expectation}")
                                 
-                                logger.debug(f"🔍 Extension found at path '{path}': {ext_url} → {resolved_ref}")
+                                logger.info(f"🔍 Extension found at path '{path}': {ext_url} → {resolved_ref}")
                                 self.referenced_resources.add(resolved_ref)
                     
                     # Operation-Definition Referenzen
@@ -514,7 +514,7 @@ class CapabilityStatementExpander:
     def extract_bindings_from_structuredefinition(self, structdef: Dict):
         """Extracts ValueSet references from the bindings of a StructureDefinition"""
         structdef_url = structdef.get('url', structdef.get('id', 'unknown'))
-        logger.debug(f"📦 Analyzing StructureDefinition for bindings: {structdef_url}")
+        logger.info(f"📦 Analyzing StructureDefinition for bindings: {structdef_url}")
         
         def extract_bindings_recursive(obj: Any, path: str = ""):
             if isinstance(obj, dict):
@@ -524,10 +524,10 @@ class CapabilityStatementExpander:
                         if ReferenceKeys.VALUE_SET in value and isinstance(value[ReferenceKeys.VALUE_SET], str):
                             valueset_ref = self.resolve_reference(value[ReferenceKeys.VALUE_SET])
                             self.referenced_resources.add(valueset_ref)
-                            logger.debug(f"  ✅ ValueSet from binding in {structdef_url}: {valueset_ref}")
+                            logger.info(f"  ✅ ValueSet from binding in {structdef_url}: {valueset_ref}")
                     # Also check for extension URLs in the StructureDefinition itself
                     elif key == 'url' and isinstance(value, str) and 'Extension' in value:
-                        logger.debug(f"  ℹ️  Extension URL in StructureDefinition {structdef_url}: {value}")
+                        logger.info(f"  ℹ️  Extension URL in StructureDefinition {structdef_url}: {value}")
                     else:
                         extract_bindings_recursive(value, f"{path}.{key}")
             elif isinstance(obj, list):
@@ -698,13 +698,13 @@ class CapabilityStatementExpander:
                 resource_type = resource.get('resourceType')
                 
                 if resource_type == ResourceTypes.VALUE_SET:
-                    logger.debug(f"🔍 Analyzing ValueSet: {resource_id}")
+                    logger.info(f"🔍 Analyzing ValueSet: {resource_id}")
                     self.extract_codesystems_from_valueset(resource)
                 elif resource_type == ResourceTypes.SEARCH_PARAMETER:
-                    logger.debug(f"🔍 Analyzing SearchParameter: {resource_id}")
+                    logger.info(f"🔍 Analyzing SearchParameter: {resource_id}")
                     self.extract_references_from_searchparameter(resource)
                 elif resource_type == ResourceTypes.STRUCTURE_DEFINITION:
-                    logger.debug(f"🔍 Analyzing StructureDefinition: {resource_id}")
+                    logger.info(f"🔍 Analyzing StructureDefinition: {resource_id}")
                     self.extract_bindings_from_structuredefinition(resource)
             
             new_count = len(self.referenced_resources)
