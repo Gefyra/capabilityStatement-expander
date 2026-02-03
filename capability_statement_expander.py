@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.5"
+__version__ = "0.7.6"
 
 # Constants
 class Expectation(Enum):
@@ -506,6 +506,9 @@ class CapabilityStatementExpander:
         # Extract bindings from StructureDefinitions
         self.extract_bindings_from_structuredefinitions()
         
+        # Extract type profiles from StructureDefinitions
+        self.extract_type_profiles_from_structuredefinitions()
+        
         # Collect parent profiles from StructureDefinitions
         self.collect_parent_profiles()
         
@@ -518,6 +521,13 @@ class CapabilityStatementExpander:
             resource_info = self.find_resource_by_reference(resource_ref)
             if resource_info and resource_info['resource'].get('resourceType') == ResourceTypes.STRUCTURE_DEFINITION:
                 self.extract_bindings_from_structuredefinition(resource_info['resource'])
+    
+    def extract_type_profiles_from_structuredefinitions(self):
+        """Extracts profile references from StructureDefinition type[].profile arrays"""
+        for resource_ref in sorted(list(self.referenced_resources)):
+            resource_info = self.find_resource_by_reference(resource_ref)
+            if resource_info and resource_info['resource'].get('resourceType') == ResourceTypes.STRUCTURE_DEFINITION:
+                self.extract_type_profiles_from_structuredefinition(resource_info['resource'])
     
     def extract_bindings_from_structuredefinition(self, structdef: Dict):
         """Extracts ValueSet references from the bindings of a StructureDefinition"""
@@ -543,6 +553,37 @@ class CapabilityStatementExpander:
                     extract_bindings_recursive(item, f"{path}[{i}]")
         
         extract_bindings_recursive(structdef)
+    
+    def extract_type_profiles_from_structuredefinition(self, structdef: Dict):
+        """Extracts profile references from type[].profile arrays in a StructureDefinition"""
+        structdef_url = structdef.get('url', structdef.get('id', 'unknown'))
+        logger.debug(f"🔍 Analyzing StructureDefinition for type profiles: {structdef_url}")
+        
+        def extract_type_profiles_recursive(obj: Any, path: str = ""):
+            if isinstance(obj, dict):
+                # Check if this is a type element with profile
+                if 'code' in obj and ReferenceKeys.PROFILE in obj:
+                    # This is a type[] element with profile (e.g., {"code": "Coding", "profile": ["url"]})
+                    profiles = obj[ReferenceKeys.PROFILE]
+                    if isinstance(profiles, list):
+                        for profile_url in profiles:
+                            if isinstance(profile_url, str):
+                                profile_ref = self.resolve_reference(profile_url)
+                                self.referenced_resources.add(profile_ref)
+                                logger.info(f"  ✅ Profile from type[] in {structdef_url}: {profile_ref}")
+                    elif isinstance(profiles, str):
+                        profile_ref = self.resolve_reference(profiles)
+                        self.referenced_resources.add(profile_ref)
+                        logger.info(f"  ✅ Profile from type[] in {structdef_url}: {profile_ref}")
+                
+                # Continue recursively through all nested objects
+                for key, value in obj.items():
+                    extract_type_profiles_recursive(value, f"{path}.{key}")
+            elif isinstance(obj, list):
+                for i, item in enumerate(obj):
+                    extract_type_profiles_recursive(item, f"{path}[{i}]")
+        
+        extract_type_profiles_recursive(structdef)
     
     def collect_parent_profiles(self):
         """Collects all parent profiles recursively from referenced StructureDefinitions"""

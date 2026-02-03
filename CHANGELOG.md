@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.6] - 2026-02-03
+
+### Fixed
+- **Profile Extraction**: Fixed extraction of `type[].profile` references from StructureDefinitions
+  - Added `extract_type_profiles_from_structuredefinitions()` method to recursively extract profile URLs from element type definitions
+  - Profiles like `ISiKSnomedCTCoding`, `ISiKLoincCoding`, `ISiKICD10GMCoding` are now correctly included
+  - This resolves IG Publisher warnings about missing Coding profiles in slice definitions
+- **GitHub Actions Debug Logging**: Fixed verbose flag not being applied when `ACTIONS_STEP_DEBUG=true` is set
+  - The `--verbose` flag is now correctly passed when GitHub Actions debug mode is active
+  - Previously, the verbose input parameter was checked but the computed `VERBOSE_FLAG` variable was not used
+
+### Technical Details
+- Profile references in StructureDefinition element types (e.g., `{"code": "Coding", "profile": ["url"]}`) are now extracted during iterative reference resolution
+- The extraction follows the same pattern as binding ValueSet extraction but specifically targets `type[].profile` arrays
+
 ## [0.7.5] - 2026-02-03
 
 ### Fixed
