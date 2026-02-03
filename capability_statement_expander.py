@@ -16,9 +16,45 @@ from pathlib import Path
 from typing import Dict, List, Set, Any
 import logging
 import copy
+from enum import Enum
 
 # Version
-__version__ = "0.6.2"
+__version__ = "0.7.0"
+
+# Constants
+class Expectation(Enum):
+    """Import expectation levels in FHIR CapabilityStatements"""
+    SHALL = 'SHALL'
+    SHOULD = 'SHOULD'
+    MAY = 'MAY'
+    SHOULD_NOT = 'SHOULD-NOT'
+
+class ReferenceKeys:
+    """Common reference keys in FHIR resources"""
+    SUPPORTED_PROFILE = 'supportedProfile'
+    PROFILE = 'profile'
+    TARGET_PROFILE = 'targetProfile'
+    VALUE_SET = 'valueSet'
+    BINDING = 'binding'
+    SYSTEM = 'system'
+    SEARCH_PARAM = 'searchParam'
+    DEFINITION = 'definition'
+    INTERACTION = 'interaction'
+    EXTENSION = 'extension'
+    MODIFIER_EXTENSION = 'modifierExtension'
+    OPERATION = 'operation'
+    COMPARTMENT = 'compartment'
+    IMPORTS = 'imports'
+    INSTANTIATES = 'instantiates'
+    BASE_DEFINITION = 'baseDefinition'
+
+class ResourceTypes:
+    """FHIR resource types"""
+    CAPABILITY_STATEMENT = 'CapabilityStatement'
+    STRUCTURE_DEFINITION = 'StructureDefinition'
+    VALUE_SET = 'ValueSet'
+    CODE_SYSTEM = 'CodeSystem'
+    SEARCH_PARAMETER = 'SearchParameter'
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -37,16 +73,16 @@ class CapabilityStatementExpander:
         self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
         self.original_capability_statements: Set[str] = set()  # Track original CapabilityStatements to expand
         self.shall_imports: Set[str] = set()  # Track imports with SHALL expectation
-        self.current_import_expectation: str = 'SHALL'  # Track current import's expectation during expansion
+        self.current_import_expectation: str = Expectation.SHALL.value  # Track current import's expectation during expansion
         self.all_resources: Dict[str, Dict] = {}
         self.resources_by_url: Dict[str, Dict] = {}  # Index for canonical URLs
         
         # Expectation hierarchy: SHALL > SHOULD > MAY
         # Note: SHOULD-NOT is never imported
         self.expectation_hierarchy = {
-            'SHALL': ['SHALL'],
-            'SHOULD': ['SHALL', 'SHOULD'],
-            'MAY': ['SHALL', 'SHOULD', 'MAY']
+            Expectation.SHALL.value: [Expectation.SHALL.value],
+            Expectation.SHOULD.value: [Expectation.SHALL.value, Expectation.SHOULD.value],
+            Expectation.MAY.value: [Expectation.SHALL.value, Expectation.SHOULD.value, Expectation.MAY.value]
         }
         
         # Track processed files for reporting
@@ -63,7 +99,7 @@ class CapabilityStatementExpander:
             True if the import should be processed, False otherwise
         """
         # SHOULD-NOT is never imported
-        if expectation == 'SHOULD-NOT':
+        if expectation == Expectation.SHOULD_NOT.value:
             return False
         
         # No filter = import everything (except SHOULD-NOT)
@@ -128,7 +164,7 @@ class CapabilityStatementExpander:
             resource_info = self.resources_by_url[capability_statement_url]
             cs = resource_info['resource']
             
-            if cs.get('resourceType') != 'CapabilityStatement':
+            if cs.get('resourceType') != ResourceTypes.CAPABILITY_STATEMENT:
                 raise ValueError(f"Resource with URL {capability_statement_url} is not a CapabilityStatement")
                 
             logger.info(f"CapabilityStatement found: {cs.get('id')} ({capability_statement_url})")
@@ -140,7 +176,7 @@ class CapabilityStatementExpander:
             resource_info = self.all_resources[capability_statement_url]
             cs = resource_info['resource']
             
-            if cs.get('resourceType') != 'CapabilityStatement':
+            if cs.get('resourceType') != ResourceTypes.CAPABILITY_STATEMENT:
                 raise ValueError(f"Resource with ID {capability_statement_url} is not a CapabilityStatement")
                 
             logger.info(f"CapabilityStatement found by ID: {cs.get('id')}")
@@ -150,7 +186,7 @@ class CapabilityStatementExpander:
         for url, resource_info in self.resources_by_url.items():
             if capability_statement_url in url or url.endswith(capability_statement_url):
                 cs = resource_info['resource']
-                if cs.get('resourceType') == 'CapabilityStatement':
+                if cs.get('resourceType') == ResourceTypes.CAPABILITY_STATEMENT:
                     logger.info(f"CapabilityStatement found by URL match: {cs.get('id')} ({url})")
                     return cs
         
@@ -164,8 +200,8 @@ class CapabilityStatementExpander:
         imports = []
         
         # Search for imports in various contexts
-        if 'imports' in resource:
-            import_list = resource['imports'] if isinstance(resource['imports'], list) else [resource['imports']]
+        if ReferenceKeys.IMPORTS in resource:
+            import_list = resource[ReferenceKeys.IMPORTS] if isinstance(resource[ReferenceKeys.IMPORTS], list) else [resource[ReferenceKeys.IMPORTS]]
             
             # Check for _imports with expectation extensions
             _imports = resource.get('_imports', [])
@@ -186,11 +222,11 @@ class CapabilityStatementExpander:
                 imports.append((import_url, expectation))
         
         # Search for instantiates (extended CapabilityStatements)
-        if 'instantiates' in resource:
-            instantiate_list = resource['instantiates'] if isinstance(resource['instantiates'], list) else [resource['instantiates']]
+        if ReferenceKeys.INSTANTIATES in resource:
+            instantiate_list = resource[ReferenceKeys.INSTANTIATES] if isinstance(resource[ReferenceKeys.INSTANTIATES], list) else [resource[ReferenceKeys.INSTANTIATES]]
             # Instantiates are always treated as SHALL
             for inst_url in instantiate_list:
-                imports.append((inst_url, 'SHALL'))
+                imports.append((inst_url, Expectation.SHALL.value))
         
         return imports
     
@@ -230,7 +266,7 @@ class CapabilityStatementExpander:
             should_import = self.should_import_expectation(expectation)
             
             # Track SHALL imports (for backwards compatibility)
-            if expectation == 'SHALL':
+            if expectation == Expectation.SHALL.value:
                 self.shall_imports.add(import_id)
             
             if should_import:
@@ -263,7 +299,7 @@ class CapabilityStatementExpander:
             if imported_resource_info:
                 imported_resource = imported_resource_info['resource']
                 
-                if imported_resource.get('resourceType') == 'CapabilityStatement':
+                if imported_resource.get('resourceType') == ResourceTypes.CAPABILITY_STATEMENT:
                     # Add the imported CapabilityStatement to imported_capability_statements set
                     canonical_url = imported_resource.get('url')
                     if canonical_url:
@@ -307,8 +343,8 @@ class CapabilityStatementExpander:
     def clean_expanded_capability_statement(self, cs: Dict):
         """Removes imports and _imports from the expanded CapabilityStatement"""
         # Remove imports as they have already been resolved
-        if 'imports' in cs:
-            del cs['imports']
+        if ReferenceKeys.IMPORTS in cs:
+            del cs[ReferenceKeys.IMPORTS]
         
         # Remove _imports as they have already been resolved
         if '_imports' in cs:
@@ -376,7 +412,7 @@ class CapabilityStatementExpander:
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     # Profile-Referenzen
-                    if key in ['supportedProfile', 'profile', 'targetProfile']:
+                    if key in [ReferenceKeys.SUPPORTED_PROFILE, ReferenceKeys.PROFILE, ReferenceKeys.TARGET_PROFILE]:
                         if isinstance(value, list):
                             for ref in value:
                                 self.referenced_resources.add(self.resolve_reference(ref))
@@ -384,52 +420,52 @@ class CapabilityStatementExpander:
                             self.referenced_resources.add(self.resolve_reference(value))
                     
                     # ValueSet-Referenzen
-                    elif key in ['valueSet', 'binding']:
-                        if isinstance(value, dict) and 'valueSet' in value:
+                    elif key in [ReferenceKeys.VALUE_SET, ReferenceKeys.BINDING]:
+                        if isinstance(value, dict) and ReferenceKeys.VALUE_SET in value:
                             # Binding with valueSet
-                            self.referenced_resources.add(self.resolve_reference(value['valueSet']))
+                            self.referenced_resources.add(self.resolve_reference(value[ReferenceKeys.VALUE_SET]))
                         elif isinstance(value, str):
                             self.referenced_resources.add(self.resolve_reference(value))
                     
                     # CodeSystem-Referenzen (nur in spezifischen Kontexten)
-                    elif key == 'system' and isinstance(value, str):
+                    elif key == ReferenceKeys.SYSTEM and isinstance(value, str):
                         # Nur in bestimmten Kontexten CodeSystems sammeln
                         context_path = path.lower()
                         if any(ctx in context_path for ctx in ['binding', 'searchparam', 'valueset', 'extension']):
                             self.referenced_resources.add(self.resolve_reference(value))
                     
                     # SearchParameter-Referenzen
-                    elif key == 'searchParam' and isinstance(value, list):
+                    elif key == ReferenceKeys.SEARCH_PARAM and isinstance(value, list):
                         for param in value:
                             if isinstance(param, dict):
                                 # SearchParameter Definition URL
-                                if 'definition' in param:
-                                    self.referenced_resources.add(self.resolve_reference(param['definition']))
+                                if ReferenceKeys.DEFINITION in param:
+                                    self.referenced_resources.add(self.resolve_reference(param[ReferenceKeys.DEFINITION]))
                                 # Binding in SearchParameter
-                                if 'binding' in param and isinstance(param['binding'], dict):
-                                    if 'valueSet' in param['binding']:
-                                        self.referenced_resources.add(self.resolve_reference(param['binding']['valueSet']))
+                                if ReferenceKeys.BINDING in param and isinstance(param[ReferenceKeys.BINDING], dict):
+                                    if ReferenceKeys.VALUE_SET in param[ReferenceKeys.BINDING]:
+                                        self.referenced_resources.add(self.resolve_reference(param[ReferenceKeys.BINDING][ReferenceKeys.VALUE_SET]))
                     
                     # Interaction-spezifische Profile
-                    elif key == 'interaction' and isinstance(value, list):
+                    elif key == ReferenceKeys.INTERACTION and isinstance(value, list):
                         for interaction in value:
-                            if isinstance(interaction, dict) and 'profile' in interaction:
-                                self.referenced_resources.add(self.resolve_reference(interaction['profile']))
+                            if isinstance(interaction, dict) and ReferenceKeys.PROFILE in interaction:
+                                self.referenced_resources.add(self.resolve_reference(interaction[ReferenceKeys.PROFILE]))
                     
                     # Extension-Referenzen
-                    elif key in ['extension', 'modifierExtension'] and isinstance(value, list):
+                    elif key in [ReferenceKeys.EXTENSION, ReferenceKeys.MODIFIER_EXTENSION] and isinstance(value, list):
                         for ext in value:
                             if isinstance(ext, dict) and 'url' in ext:
                                 self.referenced_resources.add(self.resolve_reference(ext['url']))
                     
                     # Operation-Definition Referenzen
-                    elif key == 'operation' and isinstance(value, list):
+                    elif key == ReferenceKeys.OPERATION and isinstance(value, list):
                         for op in value:
-                            if isinstance(op, dict) and 'definition' in op:
-                                self.referenced_resources.add(self.resolve_reference(op['definition']))
+                            if isinstance(op, dict) and ReferenceKeys.DEFINITION in op:
+                                self.referenced_resources.add(self.resolve_reference(op[ReferenceKeys.DEFINITION]))
                     
                     # Compartment-Referenzen
-                    elif key == 'compartment' and isinstance(value, list):
+                    elif key == ReferenceKeys.COMPARTMENT and isinstance(value, list):
                         for comp in value:
                             if isinstance(comp, str):
                                 self.referenced_resources.add(self.resolve_reference(comp))
@@ -460,9 +496,9 @@ class CapabilityStatementExpander:
     
     def extract_bindings_from_structuredefinitions(self):
         """Extracts ValueSet/CodeSystem references from StructureDefinition bindings"""
-        for resource_ref in list(self.referenced_resources):
+        for resource_ref in sorted(list(self.referenced_resources)):
             resource_info = self.find_resource_by_reference(resource_ref)
-            if resource_info and resource_info['resource'].get('resourceType') == 'StructureDefinition':
+            if resource_info and resource_info['resource'].get('resourceType') == ResourceTypes.STRUCTURE_DEFINITION:
                 self.extract_bindings_from_structuredefinition(resource_info['resource'])
     
     def extract_bindings_from_structuredefinition(self, structdef: Dict):
@@ -470,10 +506,10 @@ class CapabilityStatementExpander:
         def extract_bindings_recursive(obj: Any, path: str = ""):
             if isinstance(obj, dict):
                 for key, value in obj.items():
-                    if key == 'binding' and isinstance(value, dict):
+                    if key == ReferenceKeys.BINDING and isinstance(value, dict):
                         # Binding found - extract ValueSet
-                        if 'valueSet' in value and isinstance(value['valueSet'], str):
-                            valueset_ref = self.resolve_reference(value['valueSet'])
+                        if ReferenceKeys.VALUE_SET in value and isinstance(value[ReferenceKeys.VALUE_SET], str):
+                            valueset_ref = self.resolve_reference(value[ReferenceKeys.VALUE_SET])
                             self.referenced_resources.add(valueset_ref)
                             logger.debug(f"ValueSet extracted from StructureDefinition binding: {valueset_ref}")
                     else:
@@ -490,9 +526,9 @@ class CapabilityStatementExpander:
         
         # Get all currently referenced StructureDefinitions
         structuredefs_to_process = []
-        for resource_ref in list(self.referenced_resources):
+        for resource_ref in sorted(list(self.referenced_resources)):
             resource_info = self.find_resource_by_reference(resource_ref)
-            if resource_info and resource_info['resource'].get('resourceType') == 'StructureDefinition':
+            if resource_info and resource_info['resource'].get('resourceType') == ResourceTypes.STRUCTURE_DEFINITION:
                 structuredefs_to_process.append((resource_ref, resource_info['resource']))
         
         total_parents_found = 0
@@ -520,7 +556,7 @@ class CapabilityStatementExpander:
             logger.warning(f"Maximum recursion depth ({max_depth}) reached for profile: {profile_ref}")
             return 0
         
-        base_definition = structdef.get('baseDefinition')
+        base_definition = structdef.get(ReferenceKeys.BASE_DEFINITION)
         
         if not base_definition:
             # No parent profile defined - end of hierarchy
@@ -547,7 +583,7 @@ class CapabilityStatementExpander:
         
         if parent_resource_info:
             # Parent profile found in our resources
-            if parent_resource_info['resource'].get('resourceType') == 'StructureDefinition':
+            if parent_resource_info['resource'].get('resourceType') == ResourceTypes.STRUCTURE_DEFINITION:
                 self.referenced_resources.add(base_definition)
                 logger.info(f"Parent profile added: {base_definition} (parent of {profile_ref})")
                 
@@ -629,24 +665,24 @@ class CapabilityStatementExpander:
             resources_to_analyze = []
             
             # Collect only NEW ValueSet, SearchParameter and StructureDefinition references (not yet analyzed)
-            for resource_ref in list(self.referenced_resources):
+            for resource_ref in sorted(list(self.referenced_resources)):
                 if resource_ref in analyzed_resources:
                     continue  # Skip already analyzed resources
                     
                 resource_info = self.find_resource_by_reference(resource_ref)
                 if resource_info:
                     resource_type = resource_info['resource'].get('resourceType')
-                    if resource_type in ['ValueSet', 'SearchParameter', 'StructureDefinition']:
+                    if resource_type in [ResourceTypes.VALUE_SET, ResourceTypes.SEARCH_PARAMETER, ResourceTypes.STRUCTURE_DEFINITION]:
                         resources_to_analyze.append(resource_info['resource'])
                         analyzed_resources.add(resource_ref)
             
             # Analyze resources for additional references
             for resource in resources_to_analyze:
-                if resource.get('resourceType') == 'ValueSet':
+                if resource.get('resourceType') == ResourceTypes.VALUE_SET:
                     self.extract_codesystems_from_valueset(resource)
-                elif resource.get('resourceType') == 'SearchParameter':
+                elif resource.get('resourceType') == ResourceTypes.SEARCH_PARAMETER:
                     self.extract_references_from_searchparameter(resource)
-                elif resource.get('resourceType') == 'StructureDefinition':
+                elif resource.get('resourceType') == ResourceTypes.STRUCTURE_DEFINITION:
                     self.extract_bindings_from_structuredefinition(resource)
             
             new_count = len(self.referenced_resources)
@@ -665,10 +701,10 @@ class CapabilityStatementExpander:
         def extract_refs_recursive(obj: Any):
             if isinstance(obj, dict):
                 for key, value in obj.items():
-                    if key == 'valueSet' and isinstance(value, str):
+                    if key == ReferenceKeys.VALUE_SET and isinstance(value, str):
                         self.referenced_resources.add(self.resolve_reference(value))
                         logger.debug(f"ValueSet extracted from SearchParameter: {value}")
-                    elif key == 'system' and isinstance(value, str):
+                    elif key == ReferenceKeys.SYSTEM and isinstance(value, str):
                         self.referenced_resources.add(self.resolve_reference(value))
                         logger.debug(f"CodeSystem extracted from SearchParameter: {value}")
                     else:
@@ -684,11 +720,11 @@ class CapabilityStatementExpander:
         def extract_systems_recursive(obj: Any):
             if isinstance(obj, dict):
                 for key, value in obj.items():
-                    if key == 'system' and isinstance(value, str):
+                    if key == ReferenceKeys.SYSTEM and isinstance(value, str):
                         # CodeSystem URL found
                         self.referenced_resources.add(self.resolve_reference(value))
                         logger.debug(f"CodeSystem extracted from ValueSet: {value}")
-                    elif key == 'valueSet' and isinstance(value, str):
+                    elif key == ReferenceKeys.VALUE_SET and isinstance(value, str):
                         # Reference to other ValueSets (for compose.include)
                         self.referenced_resources.add(self.resolve_reference(value))
                     else:
@@ -728,27 +764,8 @@ class CapabilityStatementExpander:
         # Output directory already created in run(), no need to clean here
         
         copied_count = 0
-        for resource_ref in self.referenced_resources:
-            resource_info = None
-            
-            # Search by canonical URL
-            if resource_ref in self.resources_by_url:
-                resource_info = self.resources_by_url[resource_ref]
-            # Fallback by ID
-            elif resource_ref in self.all_resources:
-                resource_info = self.all_resources[resource_ref]
-            # Try URL fragments
-            else:
-                for url, info in self.resources_by_url.items():
-                    if resource_ref in url or url.endswith(resource_ref.split('/')[-1]):
-                        resource_info = info
-                        break
-                        
-                # Fallback: last URL-Segment as ID
-                if not resource_info:
-                    fragment = resource_ref.split('/')[-1]
-                    if fragment in self.all_resources:
-                        resource_info = self.all_resources[fragment]
+        for resource_ref in sorted(self.referenced_resources):
+            resource_info = self.find_resource_by_reference(resource_ref)
             
             if resource_info:
                 source_path = resource_info['file_path']
@@ -788,32 +805,13 @@ class CapabilityStatementExpander:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         copied_count = 0
-        for cs_ref in self.imported_capability_statements:
+        for cs_ref in sorted(self.imported_capability_statements):
             # Skip if this is one of the original CapabilityStatements we're expanding
             if cs_ref in self.original_capability_statements:
                 logger.debug(f"Skipping original CapabilityStatement: {cs_ref}")
                 continue
             
-            resource_info = None
-            
-            # Search by canonical URL
-            if cs_ref in self.resources_by_url:
-                resource_info = self.resources_by_url[cs_ref]
-            # Fallback by ID
-            elif cs_ref in self.all_resources:
-                resource_info = self.all_resources[cs_ref]
-            # Try URL fragments
-            else:
-                for url, info in self.resources_by_url.items():
-                    if cs_ref in url or url.endswith(cs_ref.split('/')[-1]):
-                        resource_info = info
-                        break
-                        
-                # Fallback: last URL-Segment as ID
-                if not resource_info:
-                    fragment = cs_ref.split('/')[-1]
-                    if fragment in self.all_resources:
-                        resource_info = self.all_resources[fragment]
+            resource_info = self.find_resource_by_reference(cs_ref)
             
             if resource_info:
                 source_path = resource_info['file_path']
@@ -958,10 +956,10 @@ class CapabilityStatementExpander:
             expanded_cs['title'] = f"{expanded_cs['title']} (Expanded)"
         
         # Remove imports (as they are now resolved)
-        if 'imports' in expanded_cs:
-            del expanded_cs['imports']
-        if 'instantiates' in expanded_cs:
-            del expanded_cs['instantiates']
+        if ReferenceKeys.IMPORTS in expanded_cs:
+            del expanded_cs[ReferenceKeys.IMPORTS]
+        if ReferenceKeys.INSTANTIATES in expanded_cs:
+            del expanded_cs[ReferenceKeys.INSTANTIATES]
         
         # Save the expanded version
         output_file = self.output_dir / f"CapabilityStatement-{expanded_id}.json"

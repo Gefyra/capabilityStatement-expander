@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-02-03
+
+### Added
+- Enum classes for better type safety: `Expectation`, `ReferenceKeys`, `ResourceTypes`
+- Deterministic resource iteration with sorted() for reproducible builds
+- Constants for all magic strings to improve maintainability
+
+### Changed
+- **MAJOR REFACTORING**: Replaced all magic strings with typed constants
+- Resource iteration is now deterministic (sorted) to ensure identical results across environments
+- Improved code structure and readability throughout
+- All FHIR resource type checks now use `ResourceTypes` constants
+- All reference keys now use `ReferenceKeys` constants
+- Expectation values now use `Expectation` enum
+
+### Fixed
+- Non-deterministic behavior between CI and local builds caused by unsorted Set iteration
+- Code duplication in resource lookup (consolidated into single method)
+- Indentation error in find_capability_statement method
+
+## [0.6.2] - 2026-02-03
+
 ### Added
 - Smart example detection via meta.profile references
 - Enhanced documentation with detailed feature descriptions
