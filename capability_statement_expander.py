@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.6"
+__version__ = "0.7.7"
 
 # Constants
 class Expectation(Enum):
@@ -500,20 +500,63 @@ class CapabilityStatementExpander:
         logger.info(f"Referenced resources collected: {len(self.referenced_resources)}")
         logger.debug(f"Referenzen: {sorted(list(self.referenced_resources))}")
         
-        # Extract CodeSystems from referenced ValueSets
-        self.extract_codesystems_from_valuesets()
-        
-        # Extract bindings from StructureDefinitions
-        self.extract_bindings_from_structuredefinitions()
-        
-        # Extract type profiles from StructureDefinitions
-        self.extract_type_profiles_from_structuredefinitions()
+        # Iteratively extract all nested references (CodeSystems, Bindings, type[].profile)
+        self.iterative_reference_extraction()
         
         # Collect parent profiles from StructureDefinitions
         self.collect_parent_profiles()
         
         # Collect examples based on meta.profile
         self.collect_examples_by_meta_profile()
+    
+    def iterative_reference_extraction(self):
+        """Iteratively extracts all nested references from ValueSets, SearchParameters, and StructureDefinitions"""
+        max_iterations = 10
+        iteration = 0
+        analyzed_resources = set()
+        
+        while iteration < max_iterations:
+            initial_count = len(self.referenced_resources)
+            resources_to_analyze = []
+            
+            # Collect NEW resources (not yet analyzed)
+            for resource_ref in sorted(list(self.referenced_resources)):
+                if resource_ref in analyzed_resources:
+                    continue
+                    
+                resource_info = self.find_resource_by_reference(resource_ref)
+                if resource_info:
+                    resource_type = resource_info['resource'].get('resourceType')
+                    if resource_type in [ResourceTypes.VALUE_SET, ResourceTypes.SEARCH_PARAMETER, ResourceTypes.STRUCTURE_DEFINITION]:
+                        resources_to_analyze.append(resource_info['resource'])
+                        analyzed_resources.add(resource_ref)
+            
+            # Analyze resources for additional references
+            for resource in resources_to_analyze:
+                resource_id = resource.get('id', resource.get('url', 'unknown'))
+                resource_type = resource.get('resourceType')
+                
+                if resource_type == ResourceTypes.VALUE_SET:
+                    logger.info(f"🔍 Analyzing ValueSet: {resource_id}")
+                    self.extract_codesystems_from_valueset(resource)
+                elif resource_type == ResourceTypes.SEARCH_PARAMETER:
+                    logger.info(f"🔍 Analyzing SearchParameter: {resource_id}")
+                    self.extract_references_from_searchparameter(resource)
+                elif resource_type == ResourceTypes.STRUCTURE_DEFINITION:
+                    logger.info(f"🔍 Analyzing StructureDefinition: {resource_id}")
+                    self.extract_bindings_from_structuredefinition(resource)
+                    self.extract_type_profiles_from_structuredefinition(resource)
+            
+            new_count = len(self.referenced_resources)
+            if new_count > initial_count:
+                logger.info(f"Iteration {iteration + 1}: {new_count - initial_count} additional resources extracted")
+                iteration += 1
+            else:
+                # No new references found, end iteration
+                break
+        
+        if iteration >= max_iterations:
+            logger.warning(f"Maximum iteration count reached during reference extraction")
     
     def extract_bindings_from_structuredefinitions(self):
         """Extracts ValueSet/CodeSystem references from StructureDefinition bindings"""
@@ -733,56 +776,6 @@ class CapabilityStatementExpander:
         if final_count > initial_count:
             logger.info(f"Total {final_count - initial_count} additional resources added via meta.profile")
     
-    def extract_codesystems_from_valuesets(self):
-        """Extracts CodeSystem references iteratively from already referenced ValueSets and SearchParameters"""
-        max_iterations = 10  # Prevent infinite loops
-        iteration = 0
-        
-        # Track which resources we've already analyzed to avoid re-analyzing resources from previous imports
-        analyzed_resources = set()
-        
-        while iteration < max_iterations:
-            initial_count = len(self.referenced_resources)
-            resources_to_analyze = []
-            
-            # Collect only NEW ValueSet, SearchParameter and StructureDefinition references (not yet analyzed)
-            for resource_ref in sorted(list(self.referenced_resources)):
-                if resource_ref in analyzed_resources:
-                    continue  # Skip already analyzed resources
-                    
-                resource_info = self.find_resource_by_reference(resource_ref)
-                if resource_info:
-                    resource_type = resource_info['resource'].get('resourceType')
-                    if resource_type in [ResourceTypes.VALUE_SET, ResourceTypes.SEARCH_PARAMETER, ResourceTypes.STRUCTURE_DEFINITION]:
-                        resources_to_analyze.append(resource_info['resource'])
-                        analyzed_resources.add(resource_ref)
-            
-            # Analyze resources for additional references
-            for resource in resources_to_analyze:
-                resource_id = resource.get('id', resource.get('url', 'unknown'))
-                resource_type = resource.get('resourceType')
-                
-                if resource_type == ResourceTypes.VALUE_SET:
-                    logger.info(f"🔍 Analyzing ValueSet: {resource_id}")
-                    self.extract_codesystems_from_valueset(resource)
-                elif resource_type == ResourceTypes.SEARCH_PARAMETER:
-                    logger.info(f"🔍 Analyzing SearchParameter: {resource_id}")
-                    self.extract_references_from_searchparameter(resource)
-                elif resource_type == ResourceTypes.STRUCTURE_DEFINITION:
-                    logger.info(f"🔍 Analyzing StructureDefinition: {resource_id}")
-                    self.extract_bindings_from_structuredefinition(resource)
-            
-            new_count = len(self.referenced_resources)
-            if new_count > initial_count:
-                logger.info(f"Iteration {iteration + 1}: {new_count - initial_count} additional resources extracted")
-                iteration += 1
-            else:
-                # No new references found, end iteration
-                break
-        
-        if iteration >= max_iterations:
-            logger.warning(f"Maximum iteration count reached during reference extraction")
-    
     def extract_references_from_searchparameter(self, searchparam: Dict):
         """Extracts references from a SearchParameter"""
         def extract_refs_recursive(obj: Any):
@@ -823,25 +816,134 @@ class CapabilityStatementExpander:
         extract_systems_recursive(valueset)
     
     def find_resource_by_reference(self, resource_ref: str) -> Dict:
-        """Finds a resource by reference (URL or ID)"""
-        # Search by canonical URL
-        if resource_ref in self.resources_by_url:
-            return self.resources_by_url[resource_ref]
+        """Finds a resource by reference (URL or ID)
         
-        # Fallback by ID
-        if resource_ref in self.all_resources:
-            return self.all_resources[resource_ref]
+        Matching strategies:
+        1. Exact canonical URL match (for StructureDefinitions, ValueSets, etc.)
+           - Multiple resources with same URL but different versions: continues search if version mismatch
+        2. FHIR Reference format with ResourceType validation (for resource instances)
+           - Relative: "Patient/patient-123"
+           - Absolute: "http://base/fhir/Patient/patient-123"
+           - Validates: resourceType matches AND ID matches
         
-        # Try URL fragments
-        for url, resource_info in self.resources_by_url.items():
-            if resource_ref in url or url.endswith(resource_ref.split('/')[-1]):
-                return resource_info
-
-        # Fallback: last URL segment as ID
-        fragment = resource_ref.split('/')[-1]
-        if fragment in self.all_resources:
-            return self.all_resources[fragment]
+        Conformance resources (StructureDefinition, ValueSet, etc.) MUST use canonical URLs.
+        Resource instances (Patient, Observation, etc.) MUST use ResourceType/ID format.
+        Version suffixes (e.g., '|1.0.0') are validated against resource.version.
+        
+        Examples:
+        - "http://example.org/StructureDefinition/Patient" → Strategy 1 (canonical URL)
+        - "Patient/patient-123" → Strategy 2 (FHIR reference with type validation)
+        - "http://base/fhir/Patient/patient-123" → Strategy 2 (absolute FHIR reference)
+        - "patient-123" → FAILS (requires ResourceType, e.g., "Patient/patient-123")
+        - "PatientProfile" → FAILS (StructureDefinition requires canonical URL)
+        """
+        # Parse version suffix if present (e.g., "http://example.org/Patient|1.0.0")
+        requested_version = None
+        base_ref = resource_ref
+        if '|' in resource_ref:
+            base_ref, requested_version = resource_ref.rsplit('|', 1)
+        
+        # Strategy 1: Exact canonical URL match (for profiles, ValueSets, etc.)
+        # Note: There may be multiple resources with the same URL but different versions
+        if base_ref in self.resources_by_url:
+            resource_info = self.resources_by_url[base_ref]
             
+            # Validate version if specified
+            if requested_version:
+                resource_version = resource_info['resource'].get('version')
+                if resource_version != requested_version:
+                    logger.debug(f"Version mismatch for {base_ref}: requested '{requested_version}', found '{resource_version}', continuing search...")
+                    # Don't return None here - there might be another resource with the same URL but different version
+                    # Fall through to other strategies
+                else:
+                    logger.debug(f"✅ Reference found via exact canonical URL with matching version: {base_ref}|{requested_version}")
+                    return resource_info
+            else:
+                logger.debug(f"✅ Reference found via exact canonical URL: {base_ref}")
+                return resource_info
+        
+        # Strategy 2: FHIR Reference Format (ResourceType/ID) or Simple ID
+        # ONLY for resource instances (Patient, Observation, etc.)
+        # NOT for conformance resources (StructureDefinition, ValueSet, etc.)
+        # 
+        # Examples:
+        # - "Patient/patient-123" (relative FHIR reference)
+        # - "http://example.org/fhir/Patient/patient-123" (absolute FHIR reference)
+        # - "patient-123" (simple ID - fallback for examples only)
+        
+        # Definition resource types that require canonical URLs
+        DEFINITION_TYPES = {
+            'StructureDefinition', 'ValueSet', 'CodeSystem', 'SearchParameter',
+            'OperationDefinition', 'CapabilityStatement', 'CompartmentDefinition',
+            'ConceptMap', 'ImplementationGuide', 'MessageDefinition', 'NamingSystem',
+            'StructureMap', 'TerminologyCapabilities', 'TestScript'
+        }
+        
+        is_url = base_ref.startswith('http://') or base_ref.startswith('https://')
+        
+        if is_url:
+            # Absolute FHIR reference: http://base/fhir/ResourceType/ID
+            parts = base_ref.split('/')
+            if len(parts) >= 2:
+                resource_type = parts[-2]
+                resource_id = parts[-1]
+                
+                # Skip FHIR reference matching for definition resource types
+                if resource_type in DEFINITION_TYPES:
+                    logger.debug(f"⚠️  Definition resource type '{resource_type}' requires canonical URL, not found: {base_ref}")
+                    return None
+                
+                logger.debug(f"🔍 Attempting FHIR reference match for absolute URL: {base_ref} → {resource_type}/{resource_id}")
+                
+                # Find resource with matching ID and resourceType
+                if resource_id in self.all_resources:
+                    resource_info = self.all_resources[resource_id]
+                    actual_type = resource_info['resource'].get('resourceType')
+                    
+                    if actual_type == resource_type:
+                        # Validate version if specified
+                        if requested_version:
+                            resource_version = resource_info['resource'].get('version')
+                            if resource_version != requested_version:
+                                logger.error(f"Version mismatch for {resource_type}/{resource_id}: requested '{requested_version}', but resource has version '{resource_version}'")
+                                return None
+                        
+                        logger.debug(f"✅ Reference found via FHIR reference (absolute): {resource_type}/{resource_id}")
+                        return resource_info
+                    else:
+                        logger.debug(f"⚠️  ResourceType mismatch: expected '{resource_type}', found '{actual_type}'")
+            
+            # No match for canonical URL or absolute reference
+            logger.debug(f"⚠️  URL reference not found: {base_ref}")
+            return None
+        
+        # Relative FHIR reference: ResourceType/ID
+        if '/' in base_ref:
+            parts = base_ref.split('/')
+            if len(parts) == 2:
+                resource_type, resource_id = parts
+                logger.debug(f"🔍 Attempting FHIR reference match for relative reference: {resource_type}/{resource_id}")
+                
+                # Find resource with matching ID and resourceType
+                if resource_id in self.all_resources:
+                    resource_info = self.all_resources[resource_id]
+                    actual_type = resource_info['resource'].get('resourceType')
+                    
+                    if actual_type == resource_type:
+                        # Validate version if specified
+                        if requested_version:
+                            resource_version = resource_info['resource'].get('version')
+                            if resource_version != requested_version:
+                                logger.error(f"Version mismatch for {resource_type}/{resource_id}: requested '{requested_version}', but resource has version '{resource_version}'")
+                                return None
+                        
+                        logger.debug(f"✅ Reference found via FHIR reference (relative): {resource_type}/{resource_id}")
+                        return resource_info
+                    else:
+                        logger.debug(f"⚠️  ResourceType mismatch: expected '{resource_type}', found '{actual_type}'")
+        
+        # Not found - simple IDs without ResourceType are not allowed
+        logger.debug(f"⚠️  Reference not found: {base_ref} (Note: Simple IDs require ResourceType, e.g., 'Patient/{base_ref}')")
         return None
     
     def copy_referenced_resources(self):
