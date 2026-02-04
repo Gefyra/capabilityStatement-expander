@@ -7,6 +7,64 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.7] - 2026-02-04
+
+### Fixed
+- **CRITICAL BUG**: Fixed reference matching to use exact last-segment comparison instead of substring matching
+  - Previous: `url.endswith("Bundle")` matched both "Bundle" AND "ISiKBerichtBundle"
+  - Now: `url.split('/')[-1] == "Bundle"` only matches exactly "Bundle"
+  - This prevents cross-IG resource pollution where documentation resources were incorrectly included
+
+### Changed
+- **Simplified and hardened reference matching to 2 strategies**:
+  1. **Exact canonical URL** - for definitions (StructureDefinition, ValueSet, etc.)
+  2. **FHIR Reference format with MANDATORY ResourceType validation**
+     - Relative: `Patient/patient-123`
+     - Absolute: `http://base/fhir/Patient/patient-123`
+     - **Simple IDs WITHOUT ResourceType are NO LONGER allowed** (FHIR-compliant)
+
+- **BREAKING CHANGE**: Removed simple ID matching without ResourceType
+  - Previous: `"patient-123"` would match any resource with `id="patient-123"`
+  - Now: Requires `"Patient/patient-123"` to ensure ResourceType validation
+  - **Rationale**: FHIR References MUST include ResourceType to prevent false matches
+
+- **Improved version handling**: Multiple resources with same URL but different versions
+  - If requested version not found, continues search instead of immediate error
+  - Enables support for versioned canonical URLs (e.g., multiple StructureDefinition versions)
+
+- **ResourceType validation**: ALL ID-based matches now validate ResourceType
+  - `"Patient/123"` only matches if `resourceType="Patient"` AND `id="123"`
+  - Prevents false matches like `"Observation/patient-123"` matching a Patient resource
+  - No exceptions - ResourceType validation is ALWAYS enforced
+
+- **Removed**: Scheme-agnostic matching - http:// and https:// must match exactly
+
+- **Added**: Comprehensive DEBUG logging for both strategies
+  - Each strategy logs success or failure
+  - ResourceType mismatches logged at DEBUG level
+  - Version mismatches logged as DEBUG during search
+  - Helpful error message: "Simple IDs require ResourceType, e.g., 'Patient/{id}'"
+
+### Migration Guide
+If your code uses simple IDs without ResourceType:
+
+**Before (v0.7.6):**
+```python
+find_resource_by_reference("patient-123")  # ✅ Worked
+```
+
+**After (v0.7.7):**
+```python
+find_resource_by_reference("Patient/patient-123")  # ✅ Required
+find_resource_by_reference("patient-123")  # ❌ Will fail
+```
+
+### Technical Details
+- FHIR Reference matching validates both ResourceType and ID in ALL cases
+- No fallback to simple ID matching - ResourceType is MANDATORY
+- Version validation continues search for alternative versions before failing
+- Conformance resources (StructureDefinition, ValueSet, etc.) MUST use canonical URLs
+
 ## [0.7.6] - 2026-02-03
 
 ### Fixed

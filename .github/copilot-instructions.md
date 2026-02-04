@@ -57,10 +57,18 @@ FHIR_CORE_PATTERNS = [
 - Implementation: `should_import_expectation()` checks against `expectation_hierarchy` dict
 
 ### Reference Resolution Chain
-1. **Canonical URL lookup** (`resources_by_url`) - Primary method
-2. **ID lookup** (`all_resources`) - Fallback for legacy IDs
-3. **Partial URL matching** - Matches URL fragments (e.g., last path segment)
-4. Method: `find_resource_by_reference()` - Used everywhere for resource lookups
+1. **Canonical URL lookup** (`resources_by_url`) - Primary for conformance resources
+2. **FHIR Reference with ResourceType validation** - For resource instances
+   - Validates BOTH ResourceType and ID
+   - Supports relative (`Patient/patient-123`) and absolute (`http://base/fhir/Patient/patient-123`) format
+   - **Simple IDs without ResourceType are NOT allowed** (FHIR-compliant)
+3. Method: `find_resource_by_reference()` - Used everywhere for resource lookups
+
+**CRITICAL: ResourceType Validation**
+- **ALL** reference matching (except canonical URLs) validates ResourceType
+- Simple IDs like `"patient-123"` will FAIL
+- Must use FHIR Reference format: `"Patient/patient-123"`
+- Prevents false matches across resource types
 
 ## FHIR-Specific Patterns
 
@@ -152,7 +160,19 @@ Test locally by running Python script directly (action.yml just wraps CLI args).
 // CapabilityStatement-MyCS.json
 {"id": "MyCS", "url": "http://example.org/CapabilityStatement/MyCapabilityStatement"}
 ```
-**Solution**: Always use canonical URLs in `imports` and `capability_statement_url` parameter. The expander prioritizes URL-based lookups (`resources_by_url`) before falling back to IDs.
+**Solution**: Always use canonical URLs for conformance resources (StructureDefinition, ValueSet, etc.) and FHIR References for instances (Patient, Observation, etc.).
+
+**FHIR Reference Requirements**:
+- **Conformance resources** (StructureDefinition, ValueSet, CodeSystem, etc.): **MUST use canonical URLs**
+  - ✅ `"http://example.org/fhir/StructureDefinition/PatientProfile"`
+  - ❌ `"PatientProfile"` (will FAIL - no simple ID matching)
+  
+- **Resource instances** (Patient, Observation, etc.): **MUST use ResourceType/ID format**
+  - ✅ `"Patient/patient-123"` (relative FHIR reference)
+  - ✅ `"http://base/fhir/Patient/patient-123"` (absolute FHIR reference)
+  - ❌ `"patient-123"` (will FAIL - requires ResourceType)
+
+The expander prioritizes canonical URL lookups for conformance resources and validates ResourceType for all instance references.
 
 ## Debugging Workflow
 1. **Enable verbose logging**: `--verbose` or `verbose: 'true'` in GitHub Action
