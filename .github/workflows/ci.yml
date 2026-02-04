@@ -33,15 +33,15 @@ jobs:
         
     - name: Run syntax check
       run: |
-        python -m py_compile capability_statement_expanderStrategy 3: FHIR Reference Format (ResourceType/ID)
+        python -m py_compile capability_statement_expander.py
         python -m py_compile test_expander.py
-        python -m py_compile test_reference_matching.py
+        python -m py_compile test_reference_matching_v2.py
         echo "✅ Syntax check passed"
         
     - name: Run reference matching unit tests
       run: |
         echo "🧪 Running reference matching tests..."
-        python test_reference_matching.py
+        python test_reference_matching_v2.py
         
     - name: Run integration tests
       run: |
