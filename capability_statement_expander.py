@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.8"
+__version__ = "0.7.9"
 
 # Constants
 class Expectation(Enum):
@@ -392,8 +392,18 @@ class CapabilityStatementExpander:
                             if existing is None:
                                 target_rest['resource'].append(copy.deepcopy(source_resource))
                             else:
-                                # Merge supportedProfile
+                                # Merge supportedProfile and other resource-level fields
                                 self.merge_supported_profiles(existing, source_resource)
+                                self.merge_resource_fields(existing, source_resource)
+                    
+                    # Merge other rest-level fields (interaction, searchParam, operation, etc.)
+                    for key, value in source_rest.items():
+                        if key not in ['mode', 'resource']:  # Skip mode (already matched) and resource (already merged)
+                            if key not in target_rest:
+                                target_rest[key] = copy.deepcopy(value)
+                            elif isinstance(value, list) and isinstance(target_rest[key], list):
+                                # Merge lists (e.g., interaction, searchParam, operation)
+                                target_rest[key].extend(copy.deepcopy(value))
         
         # Merge messaging
         if 'messaging' in source:
@@ -412,6 +422,26 @@ class CapabilityStatementExpander:
             for profile in source_resource['supportedProfile']:
                 if profile not in target_resource['supportedProfile']:
                     target_resource['supportedProfile'].append(profile)
+    
+    def merge_resource_fields(self, target_resource: Dict, source_resource: Dict):
+        """Merges additional fields from source resource into target resource"""
+        # List of fields that should be merged as lists (appending, not replacing)
+        list_fields = ['interaction', 'searchParam', 'searchInclude', 'searchRevInclude', 
+                      'operation', 'extension', 'modifierExtension']
+        
+        for key, value in source_resource.items():
+            if key in ['type', 'supportedProfile']:  # Already handled elsewhere
+                continue
+            
+            if key not in target_resource:
+                # Field doesn't exist in target, just copy it
+                target_resource[key] = copy.deepcopy(value)
+            elif key in list_fields and isinstance(value, list) and isinstance(target_resource[key], list):
+                # Merge lists by appending (with deduplication where appropriate)
+                for item in value:
+                    if item not in target_resource[key]:
+                        target_resource[key].append(copy.deepcopy(item))
+            # For other fields, keep target value (don't override)
     
     def collect_referenced_resources(self, cs: Dict):
         """Collects all resources referenced in a CapabilityStatement"""
