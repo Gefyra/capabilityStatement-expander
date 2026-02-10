@@ -297,15 +297,23 @@ input/
 ### Output Directory (after expansion)
 ```
 output/
-├── CapabilityStatement-expanded-example-base-capability.json  # ✨ Expanded CapabilityStatement  
-├── StructureDefinition-PatientProfile.json                   # 🏗️ Patient profile
-├── StructureDefinition-ObservationProfile.json               # 🏗️ Observation profile  
-├── ValueSet-PatientStatus.json                               # 📋 Patient status values
-├── SearchParameter-Patient-identifier.json                   # � Patient identifier search
-├── CapabilityStatement-imported-capability.json              # 📥 Imported capability
-├── Patient-example-1.json                                    # � Example detected via meta.profile
-└── Observation-example-1.json                                # 📊 Example detected via meta.profile
+├── CapabilityStatement-example-base-capability-expanded.json  # ✨ Expanded CapabilityStatement  
+├── StructureDefinition-PatientProfile.json                    # 🏗️ Patient profile
+├── StructureDefinition-ObservationProfile.json                # 🏗️ Observation profile  
+├── ValueSet-PatientStatus.json                                # 📋 Patient status values
+├── SearchParameter-Patient-identifier.json                    # 🔍 Patient identifier search
+├── CapabilityStatement-example-base-capability.json           # 📄 Original CapabilityStatement
+├── CapabilityStatement-imported-capability.json               # 📥 Imported CapabilityStatement
+├── Patient-example-1.json                                     # 👤 Example detected via meta.profile
+└── Observation-example-1.json                                 # 📊 Example detected via meta.profile
 ```
+
+**📝 Note:** The expanded CapabilityStatement has:
+- **File name**: Original ID + `-expanded` suffix (e.g., `CapabilityStatement-MyCS-expanded.json`)
+- **Resource ID**: Original ID + `-expanded` suffix (e.g., `"id": "MyCS-expanded"`)
+- **Canonical URL**: Original URL + `-expanded` suffix (e.g., `"url": "https://example.org/CS-expanded"`)
+- **Name & Title**: Original + `Expanded` suffix (e.g., `"name": "MyCSExpanded"`)
+- **No imports**: All `imports` and `_imports` fields are removed after expansion
 
 ## 🔧 How It Works
 
@@ -313,12 +321,19 @@ The expander performs the following steps:
 
 1. **Initial Analysis**: Loads the base CapabilityStatement and analyzes its structure
 2. **Import Resolution**: Recursively resolves all `imports` and `instantiates` references
+   - Supports multi-level imports (CS1 → CS2 → CS3, CS4)
+   - Respects expectation filters (SHALL/SHOULD/MAY)
 3. **Profile Collection**: Extracts all StructureDefinition references from `supportedProfile` fields
 4. **Binding Analysis**: Analyzes StructureDefinitions for ValueSet and CodeSystem bindings
 5. **Dependency Resolution**: Follows references in SearchParameters and OperationDefinitions
 6. **Example Detection**: Searches for Examples via `meta.profile` references to collected profiles
 7. **Iterative Processing**: Repeats analysis until no new resources are found
-8. **Final Assembly**: Creates expanded CapabilityStatement and copies all referenced resources
+8. **Final Assembly**: Creates expanded CapabilityStatement with modified metadata:
+   - Canonical URL: `{original-url}-expanded` (e.g., `https://example.org/CS-expanded`)
+   - Resource ID: `{original-id}-expanded`
+   - Name/Title: `{original}Expanded` / `{original} (Expanded)`
+   - Removes all `imports` and `_imports` fields
+9. **Resource Copy**: Copies all referenced resources (profiles, ValueSets, examples, etc.)
 
 ### 🎯 Smart Example Detection
 

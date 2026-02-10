@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.7"
+__version__ = "0.7.8"
 
 # Constants
 class Expectation(Enum):
@@ -1155,11 +1155,18 @@ class CapabilityStatementExpander:
         if 'title' in expanded_cs:
             expanded_cs['title'] = f"{expanded_cs['title']} (Expanded)"
         
-        # Remove imports (as they are now resolved)
-        if ReferenceKeys.IMPORTS in expanded_cs:
-            del expanded_cs[ReferenceKeys.IMPORTS]
-        if ReferenceKeys.INSTANTIATES in expanded_cs:
-            del expanded_cs[ReferenceKeys.INSTANTIATES]
+        # Update canonical URL with -expanded suffix
+        if 'url' in expanded_cs:
+            original_url = expanded_cs['url']
+            # Append -expanded to the URL (before any version suffix if present)
+            if '|' in original_url:
+                base_url, version = original_url.rsplit('|', 1)
+                expanded_cs['url'] = f"{base_url}-expanded|{version}"
+            else:
+                expanded_cs['url'] = f"{original_url}-expanded"
+        
+        # Note: imports and _imports are already removed by clean_expanded_capability_statement()
+        # No need to remove them again here
         
         # Save the expanded version
         output_file = self.output_dir / f"CapabilityStatement-{expanded_id}.json"
