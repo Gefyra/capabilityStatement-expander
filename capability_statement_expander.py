@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.9"
+__version__ = "0.7.10"
 
 # Constants
 class Expectation(Enum):
@@ -1242,6 +1242,11 @@ class CapabilityStatementExpander:
                 logger.info(f"\n{'='*60}")
                 logger.info(f"Processing CapabilityStatement: {base_cs.get('id')}")
                 logger.info(f"{'='*60}")
+                
+                # Reset per-CS processing state (important for multiple CapabilityStatements!)
+                # Each CapabilityStatement needs its own expansion context
+                self.processed_imports = set()
+                self.current_import_expectation = Expectation.SHALL.value
                 
                 # Track this as an original CapabilityStatement
                 cs_url = base_cs.get('url')
