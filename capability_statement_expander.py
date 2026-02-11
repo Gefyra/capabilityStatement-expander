@@ -19,15 +19,50 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.10"
+__version__ = "0.7.13"
 
 # Constants
 class Expectation(Enum):
-    """Import expectation levels in FHIR CapabilityStatements"""
+    """Import expectation levels in FHIR CapabilityStatements
+    
+    Hierarchy (higher strength = stronger expectation):
+    SHALL (4) > SHOULD (3) > MAY (2) > SHOULD-NOT (1)
+    """
     SHALL = 'SHALL'
     SHOULD = 'SHOULD'
     MAY = 'MAY'
     SHOULD_NOT = 'SHOULD-NOT'
+    
+    @property
+    def strength(self) -> int:
+        """Returns the numeric strength of this expectation level"""
+        strength_map = {
+            'SHALL': 4,
+            'SHOULD': 3,
+            'MAY': 2,
+            'SHOULD-NOT': 1
+        }
+        return strength_map.get(self.value, 0)
+    
+    @staticmethod
+    def get_strength(expectation: str) -> int:
+        """Returns the numeric strength of an expectation string
+        
+        Args:
+            expectation: Expectation value ('SHALL', 'SHOULD', 'MAY', 'SHOULD-NOT', or None)
+            
+        Returns:
+            Numeric strength (4-0), where 0 means no expectation
+        """
+        if expectation is None:
+            return 0
+        strength_map = {
+            'SHALL': 4,
+            'SHOULD': 3,
+            'MAY': 2,
+            'SHOULD-NOT': 1
+        }
+        return strength_map.get(expectation, 0)
 
 class ReferenceKeys:
     """Common reference keys in FHIR resources"""
@@ -79,7 +114,6 @@ class CapabilityStatementExpander:
         self.referenced_resources: Set[str] = set()
         self.imported_capability_statements: Set[str] = set()  # Track imported CapabilityStatements
         self.original_capability_statements: Set[str] = set()  # Track original CapabilityStatements to expand
-        self.shall_imports: Set[str] = set()  # Track imports with SHALL expectation
         self.current_import_expectation: str = Expectation.SHALL.value  # Track current import's expectation during expansion
         self.circular_refs_reported: Set[str] = set()  # Track reported circular references to avoid duplicate warnings
         self.all_resources: Dict[str, Dict] = {}
@@ -97,6 +131,31 @@ class CapabilityStatementExpander:
         self.expanded_files: List[Dict] = []
         self.copied_files: List[Dict] = []
         
+    def get_expectation_from_extensions(self, obj: Any) -> str:
+        """Extracts expectation value from capabilitystatement-expectation extension
+        
+        Returns: 'SHALL', 'SHOULD', 'MAY', 'SHOULD-NOT', or None
+        """
+        if not isinstance(obj, dict):
+            return None
+        
+        extensions = obj.get('extension', [])
+        if not isinstance(extensions, list):
+            return None
+        
+        for ext in extensions:
+            if isinstance(ext, dict) and 'capabilitystatement-expectation' in ext.get('url', ''):
+                return ext.get('valueCode')
+        
+        return None
+    
+    def is_stronger_expectation(self, new_expectation: str, existing_expectation: str) -> bool:
+        """Checks if new expectation is stronger than existing one
+        
+        SHALL (4) > SHOULD (3) > MAY (2) > SHOULD-NOT (1)
+        """
+        return Expectation.get_strength(new_expectation) > Expectation.get_strength(existing_expectation)
+    
     def should_import_expectation(self, expectation: str) -> bool:
         """Check if an import with given expectation should be processed based on filter
         
@@ -273,10 +332,6 @@ class CapabilityStatementExpander:
             # Check if this expectation should be imported based on filter
             should_import = self.should_import_expectation(expectation)
             
-            # Track SHALL imports (for backwards compatibility)
-            if expectation == Expectation.SHALL.value:
-                self.shall_imports.add(import_id)
-            
             if should_import:
                 logger.info(f"Import with {expectation} expectation: {import_id} (resources will be collected)")
             else:
@@ -414,33 +469,157 @@ class CapabilityStatementExpander:
                 pass
     
     def merge_supported_profiles(self, target_resource: Dict, source_resource: Dict):
-        """Merges supportedProfile arrays between two resources"""
+        """Merges supportedProfile arrays between two resources
+        
+        Also synchronizes _supportedProfile element extensions to maintain parallel array structure.
+        In FHIR, arrays starting with _ are element extensions and must be the same length as their main field.
+        
+        If a profile exists in both target and source with different expectations, the stronger
+        expectation wins (SHALL > SHOULD > MAY > SHOULD-NOT).
+        """
         if 'supportedProfile' in source_resource:
             if 'supportedProfile' not in target_resource:
                 target_resource['supportedProfile'] = []
             
+            # Track initial length to know where to append _supportedProfile extensions
+            initial_length = len(target_resource['supportedProfile'])
+            
             for profile in source_resource['supportedProfile']:
                 if profile not in target_resource['supportedProfile']:
                     target_resource['supportedProfile'].append(profile)
+            
+            # Synchronize _supportedProfile element extensions
+            # Element extensions must be parallel arrays (same length as main field)
+            if '_supportedProfile' in source_resource:
+                if '_supportedProfile' not in target_resource:
+                    # Initialize with null entries for existing profiles
+                    target_resource['_supportedProfile'] = [None] * initial_length
+                
+                # For each new profile added, append corresponding extension (or null)
+                source_profiles = source_resource['supportedProfile']
+                source_extensions = source_resource['_supportedProfile']
+                
+                for i, profile in enumerate(source_profiles):
+                    # Find where this profile is in target
+                    try:
+                        target_index = target_resource['supportedProfile'].index(profile)
+                        
+                        # Get expectations from both source and target
+                        source_ext = source_extensions[i] if i < len(source_extensions) else None
+                        source_expectation = self.get_expectation_from_extensions(source_ext)
+                        
+                        target_ext = target_resource['_supportedProfile'][target_index] if target_index < len(target_resource['_supportedProfile']) else None
+                        target_expectation = self.get_expectation_from_extensions(target_ext)
+                        
+                        # Update extension if:
+                        # 1. We added this profile (index >= initial_length), OR
+                        # 2. Source has stronger expectation than target
+                        should_update = (target_index >= initial_length or 
+                                       self.is_stronger_expectation(source_expectation, target_expectation))
+                        
+                        if should_update:
+                            # Ensure _supportedProfile is long enough
+                            while len(target_resource['_supportedProfile']) <= target_index:
+                                target_resource['_supportedProfile'].append(None)
+                            
+                            # Copy extension from source (or null if not present)
+                            if source_ext:
+                                target_resource['_supportedProfile'][target_index] = copy.deepcopy(source_ext)
+                            else:
+                                target_resource['_supportedProfile'][target_index] = None
+                    except ValueError:
+                        # Profile not found (shouldn't happen, but defensive)
+                        continue
+            
+            # Ensure _supportedProfile matches supportedProfile length (pad with null if needed)
+            if '_supportedProfile' in target_resource:
+                profile_count = len(target_resource['supportedProfile'])
+                extension_count = len(target_resource['_supportedProfile'])
+                
+                if extension_count < profile_count:
+                    # Pad with null to match
+                    target_resource['_supportedProfile'].extend([None] * (profile_count - extension_count))
+                elif extension_count > profile_count:
+                    # Trim excess (shouldn't happen, but defensive)
+                    target_resource['_supportedProfile'] = target_resource['_supportedProfile'][:profile_count]
     
     def merge_resource_fields(self, target_resource: Dict, source_resource: Dict):
-        """Merges additional fields from source resource into target resource"""
+        """Merges additional fields from source resource into target resource
+        
+        For complex objects (searchParam, interaction, operation), deduplication is based on key fields:
+        - searchParam: 'name' field
+        - interaction: 'code' field
+        - operation: 'name' field
+        - extension/modifierExtension: 'url' field
+        
+        For simple string arrays (searchInclude, searchRevInclude), exact string matching is used.
+        """
         # List of fields that should be merged as lists (appending, not replacing)
         list_fields = ['interaction', 'searchParam', 'searchInclude', 'searchRevInclude', 
                       'operation', 'extension', 'modifierExtension']
         
+        # Key fields for deduplication of complex objects
+        dedup_keys = {
+            'searchParam': 'name',
+            'interaction': 'code',
+            'operation': 'name',
+            'extension': 'url',
+            'modifierExtension': 'url'
+        }
+        
         for key, value in source_resource.items():
             if key in ['type', 'supportedProfile']:  # Already handled elsewhere
+                continue
+            
+            # Skip FHIR element extensions (fields starting with _) - they need special handling
+            # These are parallel arrays to their main field and must be synchronized separately
+            if key.startswith('_'):
                 continue
             
             if key not in target_resource:
                 # Field doesn't exist in target, just copy it
                 target_resource[key] = copy.deepcopy(value)
             elif key in list_fields and isinstance(value, list) and isinstance(target_resource[key], list):
-                # Merge lists by appending (with deduplication where appropriate)
-                for item in value:
-                    if item not in target_resource[key]:
-                        target_resource[key].append(copy.deepcopy(item))
+                # Merge lists with smart deduplication
+                if key in dedup_keys:
+                    # Complex objects - deduplicate by key field with expectation upgrade
+                    dedup_key = dedup_keys[key]
+                    
+                    # Build index of existing items by key
+                    existing_items = {}
+                    for idx, item in enumerate(target_resource[key]):
+                        if isinstance(item, dict) and dedup_key in item:
+                            existing_items[item[dedup_key]] = idx
+                    
+                    for item in value:
+                        if isinstance(item, dict) and dedup_key in item:
+                            item_key = item[dedup_key]
+                            
+                            if item_key in existing_items:
+                                # Item exists - check if we need to upgrade expectation
+                                existing_idx = existing_items[item_key]
+                                existing_item = target_resource[key][existing_idx]
+                                
+                                source_expectation = self.get_expectation_from_extensions(item)
+                                existing_expectation = self.get_expectation_from_extensions(existing_item)
+                                
+                                # Upgrade if source has stronger expectation
+                                if self.is_stronger_expectation(source_expectation, existing_expectation):
+                                    logger.debug(f"Upgrading expectation for {key}.{item_key}: {existing_expectation} → {source_expectation}")
+                                    target_resource[key][existing_idx] = copy.deepcopy(item)
+                            else:
+                                # New item - add it
+                                target_resource[key].append(copy.deepcopy(item))
+                                existing_items[item_key] = len(target_resource[key]) - 1
+                        else:
+                            # Item without key field (shouldn't happen, but defensive)
+                            if item not in target_resource[key]:
+                                target_resource[key].append(copy.deepcopy(item))
+                else:
+                    # Simple values (strings) - exact match deduplication
+                    for item in value:
+                        if item not in target_resource[key]:
+                            target_resource[key].append(copy.deepcopy(item))
             # For other fields, keep target value (don't override)
     
     def collect_referenced_resources(self, cs: Dict):

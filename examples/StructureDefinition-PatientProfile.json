@@ -1,7 +1,7 @@
 {
   "resourceType": "StructureDefinition",
   "id": "PatientProfile",
-  "url": "http://example.org/StructureDefinition/PatientProfile",
+  "url": "http://example.org/fhir/StructureDefinition/PatientProfile",
   "name": "PatientProfile",
   "title": "Patient Profile Example",
   "status": "active",

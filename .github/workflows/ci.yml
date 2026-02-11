@@ -35,17 +35,11 @@ jobs:
       run: |
         python -m py_compile capability_statement_expander.py
         python -m py_compile test_expander.py
-        python -m py_compile test_reference_matching_v2.py
         echo "✅ Syntax check passed"
         
-    - name: Run reference matching unit tests
+    - name: Run comprehensive test suite
       run: |
-        echo "🧪 Running reference matching tests..."
-        python test_reference_matching_v2.py
-        
-    - name: Run integration tests
-      run: |
-        echo "🧪 Running integration tests..."
+        echo "🧪 Running all tests (expansion, expectation upgrade, reference matching)..."
         python test_expander.py
         
     - name: Test with example data
