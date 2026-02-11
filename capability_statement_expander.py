@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.13"
+__version__ = "0.7.15"
 
 # Constants
 class Expectation(Enum):
@@ -90,6 +90,14 @@ class ResourceTypes:
     VALUE_SET = 'ValueSet'
     CODE_SYSTEM = 'CodeSystem'
     SEARCH_PARAMETER = 'SearchParameter'
+
+# FHIR Definition resource types that MUST use canonical URLs (not FHIR references)
+DEFINITION_TYPES = {
+    'StructureDefinition', 'ValueSet', 'CodeSystem', 'SearchParameter',
+    'OperationDefinition', 'CapabilityStatement', 'CompartmentDefinition',
+    'ConceptMap', 'ImplementationGuide', 'MessageDefinition', 'NamingSystem',
+    'StructureMap', 'TerminologyCapabilities', 'TestScript'
+}
 
 # FHIR Core base resource URL patterns (resources not expected in input directory)
 FHIR_CORE_PATTERNS = [
@@ -970,13 +978,15 @@ class CapabilityStatementExpander:
                     
                     if normalized_profile in referenced_profiles:
                         # This resource uses a referenced profile -> is an Example
-                        resource_url = resource.get('url', resource_id)
+                        # Use ResourceType/ID format for proper FHIR reference matching
+                        resource_type = resource.get('resourceType', 'Unknown')
+                        example_ref = f"{resource_type}/{resource_id}"
                         
-                        if resource_url not in self.referenced_resources:
-                            self.referenced_resources.add(resource_url)
+                        if example_ref not in self.referenced_resources:
+                            self.referenced_resources.add(example_ref)
                             examples_found += 1
                             
-                            logger.info(f"Example found via meta.profile: {resource.get('resourceType', 'Unknown')}/{resource_id} → Profile: {profile_url}")
+                            logger.info(f"Example found via meta.profile: {example_ref} → Profile: {profile_url}")
                             break  # One match is enough to classify the resource as an example
         
         logger.info(f"Meta.profile analysis completed: {examples_found} examples found")
@@ -1071,22 +1081,10 @@ class CapabilityStatementExpander:
                 logger.debug(f"✅ Reference found via exact canonical URL: {base_ref}")
                 return resource_info
         
-        # Strategy 2: FHIR Reference Format (ResourceType/ID) or Simple ID
-        # ONLY for resource instances (Patient, Observation, etc.)
-        # NOT for conformance resources (StructureDefinition, ValueSet, etc.)
-        # 
+        # Strategy 2: FHIR Reference Format (ResourceType/ID)
         # Examples:
         # - "Patient/patient-123" (relative FHIR reference)
         # - "http://example.org/fhir/Patient/patient-123" (absolute FHIR reference)
-        # - "patient-123" (simple ID - fallback for examples only)
-        
-        # Definition resource types that require canonical URLs
-        DEFINITION_TYPES = {
-            'StructureDefinition', 'ValueSet', 'CodeSystem', 'SearchParameter',
-            'OperationDefinition', 'CapabilityStatement', 'CompartmentDefinition',
-            'ConceptMap', 'ImplementationGuide', 'MessageDefinition', 'NamingSystem',
-            'StructureMap', 'TerminologyCapabilities', 'TestScript'
-        }
         
         is_url = base_ref.startswith('http://') or base_ref.startswith('https://')
         
@@ -1151,8 +1149,8 @@ class CapabilityStatementExpander:
                     else:
                         logger.debug(f"⚠️  ResourceType mismatch: expected '{resource_type}', found '{actual_type}'")
         
-        # Not found - simple IDs without ResourceType are not allowed
-        logger.debug(f"⚠️  Reference not found: {base_ref} (Note: Simple IDs require ResourceType, e.g., 'Patient/{base_ref}')")
+        # Not found
+        logger.debug(f"⚠️  Reference not found: {base_ref}")
         return None
     
     def copy_referenced_resources(self):

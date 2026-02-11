@@ -470,18 +470,18 @@ def test_reference_matching():
             print("  ❌ Wrong version should not match")
             return False
         
-        # Test 5: Simple IDs without ResourceType are NOT allowed
+        # Test 5: Simple IDs should NOT work (require ResourceType)
         print("\n🔍 Test 4.5: Simple IDs require ResourceType")
         result = expander.find_resource_by_reference("patient-123")
         if result is None:
-            print("  ✅ Simple ID without ResourceType rejected")
+            print("  ✅ Simple ID correctly rejected (requires ResourceType/ID format)")
         else:
-            print("  ❌ Simple ID should not be found")
+            print("  ❌ Simple ID should not match (missing ResourceType)")
             return False
         
         result = expander.find_resource_by_reference("Patient/patient-123")
         if result and result['resource']['id'] == "patient-123":
-            print("  ✅ FHIR reference with ResourceType works")
+            print("  ✅ FHIR reference with ResourceType works correctly")
         else:
             print("  ❌ FHIR reference failed")
             return False
