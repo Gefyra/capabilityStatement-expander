@@ -43,23 +43,21 @@ jobs:
         else
           git commit -m "chore: update version to ${{ steps.version.outputs.version }}"
           git push origin HEAD:main
-          
-          # Get the new commit SHA after the push
-          NEW_COMMIT=$(git rev-parse HEAD)
-          
-          # Update both version tag and major tag to point to this new commit
-          MAJOR_VERSION=$(echo ${{ steps.version.outputs.tag }} | cut -d. -f1)
-          
-          echo "📌 Updating tags to point to commit: $NEW_COMMIT"
-          git tag -f ${{ steps.version.outputs.tag }} $NEW_COMMIT
-          git tag -f $MAJOR_VERSION $NEW_COMMIT
-          
-          echo "🔄 Pushing updated tags..."
-          git push --force origin refs/tags/${{ steps.version.outputs.tag }}
-          git push --force origin refs/tags/$MAJOR_VERSION
-          
-          echo "✅ Both tags now point to the same commit: $NEW_COMMIT"
         fi
+        
+        # Update both version tag and major tag to point to the current commit (always, not just on commit)
+        NEW_COMMIT=$(git rev-parse HEAD)
+        MAJOR_VERSION=$(echo ${{ steps.version.outputs.tag }} | cut -d. -f1)
+        
+        echo "📌 Updating tags to point to commit: $NEW_COMMIT"
+        git tag -f ${{ steps.version.outputs.tag }} $NEW_COMMIT
+        git tag -f $MAJOR_VERSION $NEW_COMMIT
+        
+        echo "🔄 Pushing updated tags..."
+        git push --force origin refs/tags/${{ steps.version.outputs.tag }}
+        git push --force origin refs/tags/$MAJOR_VERSION
+        
+        echo "✅ Both tags now point to the same commit: $NEW_COMMIT"
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
