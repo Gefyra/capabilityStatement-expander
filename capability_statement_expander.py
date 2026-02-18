@@ -331,20 +331,23 @@ class CapabilityStatementExpander:
         
         for import_ref, expectation in imports:
             import_id = self.resolve_reference(import_ref)
-            
+
+            # Check if this expectation should be imported based on filter BEFORE
+            # marking it as processed, so a URL filtered at a weaker expectation
+            # level can still be picked up if referenced again at a stronger level.
+            should_import = self.should_import_expectation(expectation)
+
+            if not should_import:
+                logger.info(f"Import with {expectation} expectation: {import_id} (SKIPPED by expectation filter '{self.expectation_filter}')")
+                continue
+
             if import_id in self.processed_imports:
                 continue
-                
+
             self.processed_imports.add(import_id)
-            
-            # Check if this expectation should be imported based on filter
-            should_import = self.should_import_expectation(expectation)
-            
-            if should_import:
-                logger.info(f"Import with {expectation} expectation: {import_id} (resources will be collected)")
-            else:
-                logger.info(f"Import with {expectation} expectation: {import_id} (SKIPPED by expectation filter '{self.expectation_filter}')")
-            
+
+            logger.info(f"Import with {expectation} expectation: {import_id} (resources will be collected)")
+
             # Search for the imported CapabilityStatement
             imported_resource_info = None
             

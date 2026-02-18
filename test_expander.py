@@ -541,6 +541,254 @@ def test_reference_matching():
         print("\n✅ TEST 4 PASSED: All reference matching strategies work correctly")
         return True
 
+def _make_cs(cs_id: str, url: str, profile_url: str = None, imports: list = None, import_expectations: list = None) -> dict:
+    """Helper: build a minimal CapabilityStatement dict for filter tests"""
+    cs = {
+        "resourceType": "CapabilityStatement",
+        "id": cs_id,
+        "url": url,
+        "status": "active",
+        "kind": "requirements",
+        "fhirVersion": "4.0.1",
+        "format": ["application/fhir+json"],
+    }
+    if imports:
+        cs["imports"] = imports
+        if import_expectations:
+            cs["_imports"] = [
+                {
+                    "extension": [{
+                        "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+                        "valueCode": exp
+                    }]
+                } if exp else {}
+                for exp in import_expectations
+            ]
+    if profile_url:
+        cs["rest"] = [{
+            "mode": "server",
+            "resource": [{
+                "type": "Patient",
+                "supportedProfile": [profile_url]
+            }]
+        }]
+    return cs
+
+
+def test_expectation_filter_shall():
+    """--expectation-filter SHALL: only SHALL imports are processed; SHOULD/MAY are skipped"""
+    print("\n" + "=" * 70)
+    print("TEST 5: Expectation Filter -- SHALL only")
+    print("=" * 70)
+    print("Setup:")
+    print("  - base CS imports 'should-cs' (SHOULD) and 'shall-cs' (SHALL)")
+    print("  - should-cs contributes ProfileShould")
+    print("  - shall-cs contributes ProfileShall")
+    print("  - Filter: SHALL → only ProfileShall expected in output")
+
+    base_url  = "http://test.example/CapabilityStatement/base"
+    shall_url = "http://test.example/CapabilityStatement/shall-cs"
+    should_url= "http://test.example/CapabilityStatement/should-cs"
+
+    base_cs   = _make_cs("base",     base_url,
+                         imports=[shall_url, should_url],
+                         import_expectations=["SHALL", "SHOULD"])
+    shall_cs  = _make_cs("shall-cs", shall_url,
+                         profile_url="http://test.example/StructureDefinition/ProfileShall")
+    should_cs = _make_cs("should-cs",should_url,
+                         profile_url="http://test.example/StructureDefinition/ProfileShould")
+
+    with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_dir:
+        input_path  = Path(input_dir)
+        output_path = Path(output_dir)
+
+        for cs in [base_cs, shall_cs, should_cs]:
+            (input_path / f"CapabilityStatement-{cs['id']}.json").write_text(json.dumps(cs, indent=2))
+
+        expander = CapabilityStatementExpander(
+            str(input_path), str(output_path),
+            [base_url], verbose=False, clean_output=True,
+            expectation_filter="SHALL"
+        )
+        expander.run()
+
+        expanded_file = output_path / "CapabilityStatement-base-expanded.json"
+        if not expanded_file.exists():
+            print("❌ Expanded file not found!")
+            return False
+
+        with open(expanded_file) as f:
+            expanded = json.load(f)
+
+        all_profiles = []
+        for rest_entry in expanded.get("rest", []):
+            for res in rest_entry.get("resource", []):
+                all_profiles.extend(res.get("supportedProfile", []))
+
+        print(f"\nProfiles in expanded CS: {all_profiles}")
+
+        if "http://test.example/StructureDefinition/ProfileShall" not in all_profiles:
+            print("❌ ProfileShall missing — SHALL import was not processed!")
+            return False
+
+        if "http://test.example/StructureDefinition/ProfileShould" in all_profiles:
+            print("❌ ProfileShould present — SHOULD import was NOT filtered!")
+            return False
+
+        print("✅ TEST 5 PASSED: SHALL filter correctly includes SHALL, skips SHOULD")
+        return True
+
+
+def test_expectation_filter_should():
+    """--expectation-filter SHOULD: SHALL + SHOULD processed; MAY skipped"""
+    print("\n" + "=" * 70)
+    print("TEST 6: Expectation Filter -- SHOULD (SHALL + SHOULD, skip MAY)")
+    print("=" * 70)
+    print("Setup:")
+    print("  - base CS imports 'shall-cs' (SHALL), 'should-cs' (SHOULD), 'may-cs' (MAY)")
+    print("  - Filter: SHOULD → ProfileShall + ProfileShould expected, ProfileMay NOT")
+
+    base_url   = "http://test.example/CapabilityStatement/base2"
+    shall_url  = "http://test.example/CapabilityStatement/shall-cs2"
+    should_url = "http://test.example/CapabilityStatement/should-cs2"
+    may_url    = "http://test.example/CapabilityStatement/may-cs2"
+
+    base_cs   = _make_cs("base2",     base_url,
+                         imports=[shall_url, should_url, may_url],
+                         import_expectations=["SHALL", "SHOULD", "MAY"])
+    shall_cs  = _make_cs("shall-cs2", shall_url,
+                         profile_url="http://test.example/StructureDefinition/ProfileShall2")
+    should_cs = _make_cs("should-cs2",should_url,
+                         profile_url="http://test.example/StructureDefinition/ProfileShould2")
+    may_cs    = _make_cs("may-cs2",   may_url,
+                         profile_url="http://test.example/StructureDefinition/ProfileMay2")
+
+    with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_dir:
+        input_path  = Path(input_dir)
+        output_path = Path(output_dir)
+
+        for cs in [base_cs, shall_cs, should_cs, may_cs]:
+            (input_path / f"CapabilityStatement-{cs['id']}.json").write_text(json.dumps(cs, indent=2))
+
+        expander = CapabilityStatementExpander(
+            str(input_path), str(output_path),
+            [base_url], verbose=False, clean_output=True,
+            expectation_filter="SHOULD"
+        )
+        expander.run()
+
+        expanded_file = output_path / "CapabilityStatement-base2-expanded.json"
+        if not expanded_file.exists():
+            print("❌ Expanded file not found!")
+            return False
+
+        with open(expanded_file) as f:
+            expanded = json.load(f)
+
+        all_profiles = []
+        for rest_entry in expanded.get("rest", []):
+            for res in rest_entry.get("resource", []):
+                all_profiles.extend(res.get("supportedProfile", []))
+
+        print(f"\nProfiles in expanded CS: {all_profiles}")
+
+        if "http://test.example/StructureDefinition/ProfileShall2" not in all_profiles:
+            print("❌ ProfileShall2 missing — SHALL import was not processed!")
+            return False
+        if "http://test.example/StructureDefinition/ProfileShould2" not in all_profiles:
+            print("❌ ProfileShould2 missing — SHOULD import was not processed!")
+            return False
+        if "http://test.example/StructureDefinition/ProfileMay2" in all_profiles:
+            print("❌ ProfileMay2 present — MAY import was NOT filtered!")
+            return False
+
+        print("✅ TEST 6 PASSED: SHOULD filter correctly includes SHALL+SHOULD, skips MAY")
+        return True
+
+
+def test_expectation_filter_no_premature_processed_marking():
+    """
+    Regression test for the bug fixed in this PR:
+    A filtered-out import must NOT be added to processed_imports,
+    so that if the same URL appears again at a stronger expectation level
+    (e.g. in a sibling or parent CS), it is still processed correctly.
+    """
+    print("\n" + "=" * 70)
+    print("TEST 7: Regression – filtered import not prematurely marked as processed")
+    print("=" * 70)
+    print("Setup:")
+    print("  - A imports B (MAY) and C (SHALL)")
+    print("  - C also imports B (SHALL)")
+    print("  - Filter: SHALL → B's profile should appear (via C's SHALL import)")
+
+    base_url = "http://test.example/CapabilityStatement/reg-base"
+    b_url    = "http://test.example/CapabilityStatement/reg-b"
+    c_url    = "http://test.example/CapabilityStatement/reg-c"
+
+    # A: imports B with MAY *and* C with SHALL
+    a_cs = _make_cs("reg-base", base_url,
+                    imports=[b_url, c_url],
+                    import_expectations=["MAY", "SHALL"])
+    # B: contributes ProfileB
+    b_cs = _make_cs("reg-b", b_url,
+                    profile_url="http://test.example/StructureDefinition/ProfileB")
+    # C: imports B with SHALL — this is the path that should survive the filter
+    c_cs = _make_cs("reg-c", c_url,
+                    imports=[b_url],
+                    import_expectations=["SHALL"])
+    # Give C its own profile too
+    c_cs["rest"] = [{
+        "mode": "server",
+        "resource": [{
+            "type": "Patient",
+            "supportedProfile": [
+                "http://test.example/StructureDefinition/ProfileC",
+                "http://test.example/StructureDefinition/ProfileB",
+            ]
+        }]
+    }]
+
+    with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_dir:
+        input_path  = Path(input_dir)
+        output_path = Path(output_dir)
+
+        for cs in [a_cs, b_cs, c_cs]:
+            (input_path / f"CapabilityStatement-{cs['id']}.json").write_text(json.dumps(cs, indent=2))
+
+        expander = CapabilityStatementExpander(
+            str(input_path), str(output_path),
+            [base_url], verbose=False, clean_output=True,
+            expectation_filter="SHALL"
+        )
+        expander.run()
+
+        expanded_file = output_path / "CapabilityStatement-reg-base-expanded.json"
+        if not expanded_file.exists():
+            print("❌ Expanded file not found!")
+            return False
+
+        with open(expanded_file) as f:
+            expanded = json.load(f)
+
+        all_profiles = []
+        for rest_entry in expanded.get("rest", []):
+            for res in rest_entry.get("resource", []):
+                all_profiles.extend(res.get("supportedProfile", []))
+
+        print(f"\nProfiles in expanded CS: {all_profiles}")
+
+        if "http://test.example/StructureDefinition/ProfileC" not in all_profiles:
+            print("❌ ProfileC missing — SHALL import of C was not processed!")
+            return False
+
+        if "http://test.example/StructureDefinition/ProfileB" not in all_profiles:
+            print("❌ ProfileB missing — B was prematurely blocked by the MAY import path!")
+            return False
+
+        print("✅ TEST 7 PASSED: filtered import not prematurely marked as processed")
+        return True
+
+
 def main():
     """Main test runner"""
     print("=" * 70)
@@ -552,7 +800,10 @@ def main():
         ("Basic Expansion", test_basic_expansion),
         ("Expectation Upgrade", test_expectation_upgrade),
         ("Multi-Level Expectation", test_multi_level_expectation),
-        ("Reference Matching", test_reference_matching)
+        ("Reference Matching", test_reference_matching),
+        ("Filter: SHALL only", test_expectation_filter_shall),
+        ("Filter: SHOULD (SHALL+SHOULD)", test_expectation_filter_should),
+        ("Filter: no premature processed-marking", test_expectation_filter_no_premature_processed_marking),
     ]
     
     results = []
