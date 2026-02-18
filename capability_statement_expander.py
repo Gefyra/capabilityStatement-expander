@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.14"
+__version__ = "0.7.15"
 
 # Constants
 class Expectation(Enum):
@@ -152,7 +152,7 @@ class CapabilityStatementExpander:
             return None
         
         for ext in extensions:
-            if isinstance(ext, dict) and 'capabilitystatement-expectation' in ext.get('url', ''):
+            if isinstance(ext, dict) and 'expectation' in ext.get('url', '').lower():
                 return ext.get('valueCode')
         
         return None
@@ -290,7 +290,7 @@ class CapabilityStatementExpander:
                 if i < len(_imports) and _imports[i]:
                     extensions = _imports[i].get('extension', [])
                     for ext in extensions:
-                        if 'expectation' in ext.get('url', ''):
+                        if 'expectation' in ext.get('url', '').lower():
                             expectation = ext.get('valueCode', 'SHALL').upper()
                             break
                 

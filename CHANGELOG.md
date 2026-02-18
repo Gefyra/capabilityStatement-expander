@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.15] - 2026-02-18
+
+### Fixed
+- **expectation-filter: non-standard expectation extension URLs now recognized (case-insensitive)**
+  - The extension URL check was case-sensitive and only matched the HL7 standard URL fragment `capabilitystatement-expectation`
+  - ISiK-specific extension URLs like `ExtensionISiKCapabilityStatementImportsExpectation` were silently ignored, causing all imports to fall back to the `SHALL` default and bypass the filter
+  - Fix: both `get_expectation_from_extensions()` and `extract_imports()` now match any extension URL that contains `expectation` (case-insensitive), covering both standard and implementation-specific URLs
+
 ## [0.7.14] - 2026-02-18
 
 ### Fixed
