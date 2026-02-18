@@ -789,6 +789,161 @@ def test_expectation_filter_no_premature_processed_marking():
         return True
 
 
+def test_filter_respected_for_supported_profile_expectations():
+    """
+    Regression test: within a SHALL-imported CS, supportedProfile entries that
+    carry a _supportedProfile expectation of MAY must be excluded when the filter
+    is SHOULD.  Previously, collect_referenced_resources ignored per-element
+    expectations entirely.
+    """
+    print("\n" + "=" * 70)
+    print("TEST 8: Per-element supportedProfile expectation respected by filter")
+    print("=" * 70)
+    print("Setup:")
+    print("  - base CS imports 'detail-cs' (SHALL)")
+    print("  - detail-cs has ProfileShall (SHALL) and ProfileMay (MAY) in supportedProfile")
+    print("  - Filter: SHOULD → ProfileShall expected, ProfileMay NOT")
+
+    base_url   = "http://test.example/CapabilityStatement/sp-base"
+    detail_url = "http://test.example/CapabilityStatement/sp-detail"
+
+    base_cs = _make_cs("sp-base", base_url,
+                       imports=[detail_url],
+                       import_expectations=["SHALL"])
+
+    # detail-cs defines both a SHALL and a MAY supportedProfile on the same resource type
+    detail_cs = {
+        "resourceType": "CapabilityStatement",
+        "id": "sp-detail",
+        "url": detail_url,
+        "status": "active",
+        "kind": "requirements",
+        "fhirVersion": "4.0.1",
+        "format": ["application/fhir+json"],
+        "rest": [{
+            "mode": "server",
+            "resource": [{
+                "type": "Patient",
+                "supportedProfile": [
+                    "http://test.example/StructureDefinition/ProfileShallInline",
+                    "http://test.example/StructureDefinition/ProfileMayInline",
+                ],
+                "_supportedProfile": [
+                    {
+                        "extension": [{
+                            "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+                            "valueCode": "SHALL"
+                        }]
+                    },
+                    {
+                        "extension": [{
+                            "url": "http://hl7.org/fhir/StructureDefinition/capabilitystatement-expectation",
+                            "valueCode": "MAY"
+                        }]
+                    }
+                ]
+            }]
+        }]
+    }
+
+    with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_dir:
+        input_path  = Path(input_dir)
+        output_path = Path(output_dir)
+
+        for cs in [base_cs, detail_cs]:
+            (input_path / f"CapabilityStatement-{cs['id']}.json").write_text(json.dumps(cs, indent=2))
+
+        expander = CapabilityStatementExpander(
+            str(input_path), str(output_path),
+            [base_url], verbose=False, clean_output=True,
+            expectation_filter="SHOULD"
+        )
+        expander.run()
+
+        print(f"\nReferenced resources collected: {sorted(expander.referenced_resources)}")
+
+        if "http://test.example/StructureDefinition/ProfileShallInline" not in expander.referenced_resources:
+            print("❌ ProfileShallInline missing — SHALL profile was filtered out incorrectly!")
+            return False
+
+        if "http://test.example/StructureDefinition/ProfileMayInline" in expander.referenced_resources:
+            print("❌ ProfileMayInline present — MAY profile was NOT filtered from supportedProfile!")
+            return False
+
+        print("✅ TEST 8 PASSED: per-element supportedProfile expectation respected by filter")
+        return True
+
+
+def test_filter_transitive_imports_blocked():
+    """
+    When A imports B with MAY (filtered out), B must be skipped entirely —
+    including B's own transitive imports (e.g. B imports C with SHALL).
+    C must NOT appear in the output if the path to it runs through a filtered import.
+    """
+    print("\n" + "=" * 70)
+    print("TEST 9: Transitive imports blocked when parent import is filtered")
+    print("=" * 70)
+    print("Setup:")
+    print("  - A imports B (MAY)")
+    print("  - B imports C (SHALL)")
+    print("  - Filter: SHOULD → B skipped, C must also NOT appear")
+
+    a_url = "http://test.example/CapabilityStatement/trans-a"
+    b_url = "http://test.example/CapabilityStatement/trans-b"
+    c_url = "http://test.example/CapabilityStatement/trans-c"
+
+    a_cs = _make_cs("trans-a", a_url,
+                    imports=[b_url],
+                    import_expectations=["MAY"])
+    b_cs = _make_cs("trans-b", b_url,
+                    imports=[c_url],
+                    import_expectations=["SHALL"],
+                    profile_url="http://test.example/StructureDefinition/ProfileB")
+    c_cs = _make_cs("trans-c", c_url,
+                    profile_url="http://test.example/StructureDefinition/ProfileC")
+
+    with tempfile.TemporaryDirectory() as input_dir, tempfile.TemporaryDirectory() as output_dir:
+        input_path  = Path(input_dir)
+        output_path = Path(output_dir)
+
+        for cs in [a_cs, b_cs, c_cs]:
+            (input_path / f"CapabilityStatement-{cs['id']}.json").write_text(json.dumps(cs, indent=2))
+
+        expander = CapabilityStatementExpander(
+            str(input_path), str(output_path),
+            [a_url], verbose=False, clean_output=True,
+            expectation_filter="SHOULD"
+        )
+        expander.run()
+
+        expanded_file = output_path / "CapabilityStatement-trans-a-expanded.json"
+        if not expanded_file.exists():
+            print("❌ Expanded file not found!")
+            return False
+
+        with open(expanded_file) as f:
+            expanded = json.load(f)
+
+        all_profiles = []
+        for rest_entry in expanded.get("rest", []):
+            for res in rest_entry.get("resource", []):
+                all_profiles.extend(res.get("supportedProfile", []))
+
+        print(f"\nProfiles in expanded CS: {all_profiles}")
+        print(f"Referenced resources: {sorted(expander.referenced_resources)}")
+
+        if "http://test.example/StructureDefinition/ProfileB" in all_profiles:
+            print("❌ ProfileB present — B (MAY import) was NOT filtered!")
+            return False
+
+        if "http://test.example/StructureDefinition/ProfileC" in all_profiles:
+            print("❌ ProfileC present — C was reachable via filtered B (should be blocked)!")
+            return False
+
+        print("✅ TEST 9 PASSED: transitive imports correctly blocked when parent is filtered")
+        return True
+
+
 def main():
     """Main test runner"""
     print("=" * 70)
@@ -804,6 +959,8 @@ def main():
         ("Filter: SHALL only", test_expectation_filter_shall),
         ("Filter: SHOULD (SHALL+SHOULD)", test_expectation_filter_should),
         ("Filter: no premature processed-marking", test_expectation_filter_no_premature_processed_marking),
+        ("Filter: per-element supportedProfile expectation", test_filter_respected_for_supported_profile_expectations),
+        ("Filter: transitive imports blocked", test_filter_transitive_imports_blocked),
     ]
     
     results = []

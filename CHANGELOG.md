@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.14] - 2026-02-18
+
+### Fixed
+- **expectation-filter: filtered imports now correctly skip transitive dependencies**
+  - Previously, a MAY-imported CS was added to `processed_imports` before the filter check, causing it to be silently blocked even when re-encountered via a stronger (SHALL/SHOULD) import path
+  - Fix: `should_import_expectation()` is now checked *before* `processed_imports.add()` — filtered imports simply get `continue`, leaving the URL available for future stronger-expectation paths
+- **expectation-filter: per-element `_supportedProfile` expectations now respected**
+  - `collect_referenced_resources()` previously ignored the `_supportedProfile` parallel array and collected every profile unconditionally
+  - Fix: for each `supportedProfile[i]` entry the corresponding `_supportedProfile[i]` extension is checked; entries whose expectation does not meet the active filter are skipped
+- **Release workflow: `v0.x.y` tag now points to the same commit as the major `v0` tag**
+  - After the version-bump commit, both the full version tag and the major tag are force-updated to the new HEAD so they are always in sync
+
+### Added
+- **5 new tests** covering all expectation-filter scenarios:
+  - Test 5: `--expectation-filter SHALL` skips SHOULD imports
+  - Test 6: `--expectation-filter SHOULD` skips MAY imports, includes SHALL+SHOULD
+  - Test 7: Regression — filtered import not prematurely marked as processed
+  - Test 8: Per-element `_supportedProfile` expectations respected by filter
+  - Test 9: Transitive imports blocked when parent import is filtered
+
 ## [0.7.7] - 2026-02-04
 
 ### Fixed

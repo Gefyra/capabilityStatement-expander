@@ -19,7 +19,7 @@ import copy
 from enum import Enum
 
 # Version
-__version__ = "0.7.13"
+__version__ = "0.7.14"
 
 # Constants
 class Expectation(Enum):
@@ -634,15 +634,50 @@ class CapabilityStatementExpander:
             # For other fields, keep target value (don't override)
     
     def collect_referenced_resources(self, cs: Dict):
-        """Collects all resources referenced in a CapabilityStatement"""
-        
+        """Collects all resources referenced in a CapabilityStatement.
+
+        When an expectation_filter is active, supportedProfile entries whose
+        individual _supportedProfile expectation does NOT meet the filter are
+        silently skipped.  All other reference types (valueSet, searchParam,
+        operation, …) are not individually annotated in the FHIR spec, so they
+        are always collected.
+        """
+
+        def _profile_expectation_ok(parent_obj: Dict, profile_index: int) -> bool:
+            """Returns True if the profile at the given index should be included.
+
+            Checks the parallel _supportedProfile array for a
+            capabilitystatement-expectation extension on the element.
+            If no expectation is present (= implicit SHALL), it always passes.
+            """
+            if self.expectation_filter is None:
+                return True
+            shadow = parent_obj.get('_supportedProfile')
+            if not shadow or not isinstance(shadow, list):
+                return True  # no per-element annotation → always include
+            if profile_index >= len(shadow):
+                return True
+            elem = shadow[profile_index]
+            expectation = self.get_expectation_from_extensions(elem) if elem else None
+            if not expectation:
+                return True  # no annotation → treat as SHALL
+            return self.should_import_expectation(expectation)
+
         def extract_references(obj: Any, path: str = ""):
             if isinstance(obj, dict):
                 for key, value in obj.items():
                     # Profile-Referenzen
                     if key in [ReferenceKeys.SUPPORTED_PROFILE, ReferenceKeys.PROFILE, ReferenceKeys.TARGET_PROFILE]:
                         if isinstance(value, list):
-                            for ref in value:
+                            for idx, ref in enumerate(value):
+                                # For supportedProfile, honour per-element expectation filter
+                                if key == ReferenceKeys.SUPPORTED_PROFILE:
+                                    if not _profile_expectation_ok(obj, idx):
+                                        logger.debug(
+                                            f"Skipping supportedProfile[{idx}] '{ref}' "
+                                            f"(expectation below filter '{self.expectation_filter}')"
+                                        )
+                                        continue
                                 self.referenced_resources.add(self.resolve_reference(ref))
                         else:
                             self.referenced_resources.add(self.resolve_reference(value))
