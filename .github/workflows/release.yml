@@ -33,7 +33,7 @@ jobs:
         sed -i "s/__version__ = \".*\"/__version__ = \"$VERSION\"/" capability_statement_expander.py
         echo "✅ Updated __version__ to $VERSION in capability_statement_expander.py"
         
-    - name: Commit version update
+    - name: Commit version update and update tags to point to the same commit
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
@@ -43,6 +43,22 @@ jobs:
         else
           git commit -m "chore: update version to ${{ steps.version.outputs.version }}"
           git push origin HEAD:main
+          
+          # Get the new commit SHA after the push
+          NEW_COMMIT=$(git rev-parse HEAD)
+          
+          # Update both version tag and major tag to point to this new commit
+          MAJOR_VERSION=$(echo ${{ steps.version.outputs.tag }} | cut -d. -f1)
+          
+          echo "📌 Updating tags to point to commit: $NEW_COMMIT"
+          git tag -f ${{ steps.version.outputs.tag }} $NEW_COMMIT
+          git tag -f $MAJOR_VERSION $NEW_COMMIT
+          
+          echo "🔄 Pushing updated tags..."
+          git push --force origin refs/tags/${{ steps.version.outputs.tag }}
+          git push --force origin refs/tags/$MAJOR_VERSION
+          
+          echo "✅ Both tags now point to the same commit: $NEW_COMMIT"
         fi
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,21 +96,6 @@ jobs:
           For full documentation, see the [README](https://github.com/Gefyra/capabilityStatement-expander/blob/main/README.md).
         draft: false
         prerelease: false
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Update major version tag
-      run: |
-        TAG=${{ steps.version.outputs.tag }}
-        MAJOR_VERSION=$(echo $TAG | cut -d. -f1)
-        
-        # Delete existing major version tag if it exists
-        git tag -d $MAJOR_VERSION 2>/dev/null || true
-        git push origin :refs/tags/$MAJOR_VERSION 2>/dev/null || true
-        
-        # Create new major version tag
-        git tag $MAJOR_VERSION
-        git push origin $MAJOR_VERSION
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         
